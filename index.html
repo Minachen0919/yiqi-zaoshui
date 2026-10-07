@@ -118,6 +118,13 @@ textarea.field{resize:none;min-height:44px}
 .calhead{display:flex;justify-content:space-between;align-items:center}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;text-align:center}
 .cal .h{font-size:12px;color:var(--muted)}
+.album{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.album button{border:0;padding:0;background:var(--line);border-radius:10px;overflow:hidden;position:relative;aspect-ratio:3/4;cursor:pointer}
+.album img{width:100%;height:100%;object-fit:cover;display:block}
+.album span{position:absolute;left:6px;bottom:4px;font-family:var(--mono);font-size:11px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.dnote{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+button.day{font:inherit;font-family:var(--mono);font-size:13px;border:0;background:none;color:inherit;cursor:pointer;padding:0}
+button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
 .day{aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;gap:2px;max-width:100%}
 .day .m{display:flex;gap:2px;height:6px}
 .day .m i{width:6px;height:6px;border-radius:50%;background:var(--miss)}
@@ -284,7 +291,7 @@ textarea.field{resize:none;min-height:44px}
       </div>
     </section>
 
-    <section id="p-cal" class="page" hidden>
+    <section id="p-cal" class="page" hidden style="flex-direction:column;gap:16px">
       <div class="card">
         <div class="calhead">
           <button class="ghost" id="calPrev" aria-label="上个月">‹</button>
@@ -299,7 +306,19 @@ textarea.field{resize:none;min-height:44px}
           <span><i class="dot" style="border:1px dashed var(--warn)"></i>请假</span>
         </div>
       </div>
-      <p class="note" style="margin-top:12px">达标 = 按时睡且按时起</p>
+      <p class="note">点日期可以看那天的详情 · 达标 = 按时睡且按时起</p>
+
+      <div class="card" id="dayCard" hidden>
+        <div class="calhead"><h2 id="dayTitle"></h2><button class="ghost sm" id="dayClose">收起</button></div>
+        <div class="pair" id="dayPair"></div>
+        <div class="photos" id="dayPhotos"></div>
+      </div>
+
+      <div class="card">
+        <h2 id="albumTitle">早安相册</h2>
+        <div class="album" id="album"></div>
+        <p class="hint" id="albumEmpty">这个月还没有早安照片，起床打卡时附一张就会出现在这里</p>
+      </div>
     </section>
 
     <section id="p-stats" class="page" hidden style="flex-direction:column;gap:16px">

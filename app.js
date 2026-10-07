@@ -254,11 +254,81 @@ function renderCal() {
     const future = key > today;
     const a = future ? "" : status(me.id, key), b = future || !partner ? "" : status(partner.id, key);
     const dot = (s, color) => s === "ok" ? `<i style="background:${color}"></i>` : s === "leave" ? `<i class="lv"></i>` : s ? "<i></i>" : "";
-    html += `<div class="day${key === today ? " today" : ""}${future ? " future" : ""}${a === "ok" && b === "ok" ? " full" : ""}"><span>${d}</span><span class="m">${dot(a, "var(--me)")}${partner ? dot(b, "var(--ta)") : ""}</span></div>`;
+    const cls = `day${key === today ? " today" : ""}${future ? " future" : ""}${a === "ok" && b === "ok" ? " full" : ""}${key === selDay ? " sel" : ""}`;
+    const inner = `<span>${d}</span><span class="m">${dot(a, "var(--me)")}${partner ? dot(b, "var(--ta)") : ""}</span>`;
+    html += future ? `<div class="${cls}">${inner}</div>` : `<button class="${cls}" data-k="${key}" aria-label="${m + 1} 月 ${d} 日">${inner}</button>`;
   }
   $("cal").innerHTML = html;
+  $("cal").querySelectorAll("button[data-k]").forEach((b) => (b.onclick = () => selectDay(b.dataset.k)));
   $("lgMe").textContent = me.name || "我"; $("lgTa").textContent = partner?.name || "TA";
+  renderAlbum(y, m);
+  if (selDay) renderDay(selDay);
 }
+
+/* ---------- album & day detail ---------- */
+let selDay = null;
+const urlCache = new Map();
+const loadedMonths = new Set();
+async function ensureMonth(y, m) {
+  const k = `${y}-${pad(m + 1)}`;
+  if (loadedMonths.has(k)) return false;
+  loadedMonths.add(k);
+  const from = `${k}-01`, to = ymd(new Date(y, m + 1, 0));
+  const { data } = await sb.from("checkins").select("*").eq("couple_id", me.couple_id).gte("night", from).lte("night", to);
+  const seen = new Set(checkins.map((c) => c.id));
+  const add = (data || []).filter((c) => !seen.has(c.id));
+  if (add.length) { checkins.push(...add); return true; }
+  return false;
+}
+async function signed(paths) {
+  const need = paths.filter((p) => !urlCache.has(p));
+  if (need.length) {
+    const { data } = await sb.storage.from("photos").createSignedUrls(need, 3600);
+    (data || []).forEach((r, i) => r.signedUrl && urlCache.set(need[i], r.signedUrl));
+  }
+  return paths.map((p) => urlCache.get(p) || "");
+}
+const whoName = (uid) => uid === me.id ? (me.name || "我") : (partner?.name || "TA");
+async function renderAlbum(y, m) {
+  const prefix = `${y}-${pad(m + 1)}`;
+  $("albumTitle").textContent = `${m + 1} 月早安相册`;
+  const list = checkins.filter((c) => c.kind === "wake" && c.photo_path && c.night.startsWith(prefix)).sort((a, b) => b.at.localeCompare(a.at));
+  $("albumEmpty").hidden = list.length > 0;
+  if (!list.length) { $("album").innerHTML = ""; return; }
+  const urls = await signed(list.map((c) => c.photo_path));
+  $("album").innerHTML = list.map((c, i) => {
+    const d = new Date(c.at);
+    return `<button data-k="${c.night}" aria-label="${whoName(c.user_id)} ${d.getMonth() + 1} 月 ${d.getDate()} 日的早安照片"><img loading="lazy" alt="" src="${urls[i]}"><span>${d.getMonth() + 1}/${d.getDate()} ${whoName(c.user_id)}</span></button>`;
+  }).join("");
+  $("album").querySelectorAll("button").forEach((b) => (b.onclick = () => selectDay(b.dataset.k)));
+}
+function selectDay(key) {
+  selDay = key;
+  $("cal").querySelectorAll("button.day").forEach((b) => b.classList.toggle("sel", b.dataset.k === key));
+  renderDay(key);
+  $("dayCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+async function renderDay(key) {
+  const d = new Date(key + "T12:00:00");
+  $("dayCard").hidden = false;
+  $("dayTitle").textContent = `${d.getMonth() + 1} 月 ${d.getDate()} 日晚上`;
+  const people = [me, partner].filter(Boolean);
+  const label = { ok: ["ok", "达标"], miss: ["late", "没达标"], leave: ["off", "请假"], pending: ["wait", "进行中"] };
+  $("dayPair").innerHTML = people.map((p) => {
+    const r = rec(p.id, key), s = label[status(p.id, key)];
+    const t = (c) => (c ? hhmm(c.at) : "--:--");
+    // tonight's goodnight note stays locked until both have checked in, same as on the Today page
+    const mineIn = rec(me.id, key).sleep || rec(me.id, key).leave;
+    const locked = key === nightOf() && p.id !== me.id && !mineIn;
+    const note = r.leave ? `请假：${r.leave.note || "其他"}` : r.sleep?.note && !locked ? `晚安话：${r.sleep.note}` : "";
+    return `<div class="person"><div class="who"><span class="dot" style="background:var(--${p.id === me.id ? "me" : "ta"})"></span><span>${whoName(p.id)}</span></div>
+      <div class="num">睡 ${t(r.sleep)} · 起 ${t(r.wake)}</div><span class="chip ${s[0]}">${s[1]}</span>${note ? `<div class="dnote">${note.replace(/</g, "&lt;")}</div>` : ""}</div>`;
+  }).join("");
+  const list = checkins.filter((c) => c.night === key && c.kind === "wake" && c.photo_path);
+  const urls = await signed(list.map((c) => c.photo_path));
+  $("dayPhotos").innerHTML = list.map((c, i) => `<figure><img alt="${whoName(c.user_id)}的早安照片" src="${urls[i]}"><figcaption>${whoName(c.user_id)} · ${hhmm(c.at)}</figcaption></figure>`).join("");
+}
+$("dayClose").onclick = () => { selDay = null; $("dayCard").hidden = true; $("cal").querySelectorAll("button.day").forEach((b) => b.classList.remove("sel")); };
 
 /* ---------- render: stats ---------- */
 function renderStats() {
@@ -457,13 +527,19 @@ function urlB64(s) { const p = "=".repeat((4 - (s.length % 4)) % 4); const b = a
 /* ---------- tabs ---------- */
 document.querySelectorAll(".tab").forEach((t) => (t.onclick = async () => {
   document.querySelectorAll(".tab").forEach((x) => x.setAttribute("aria-selected", x === t));
-  document.querySelectorAll(".page").forEach((p) => { p.hidden = p.id !== t.dataset.p; if (!p.hidden && p.id !== "p-cal") p.style.display = "flex"; });
+  document.querySelectorAll(".page").forEach((p) => { p.hidden = p.id !== t.dataset.p; });
   if (t.dataset.p !== "p-today" && !partner) await refreshPartner();
   renderAll();
   window.scrollTo(0, 0);
 }));
-$("calPrev").onclick = () => { calMonth.setMonth(calMonth.getMonth() - 1); renderCal(); };
-$("calNext").onclick = () => { calMonth.setMonth(calMonth.getMonth() + 1); renderCal(); };
+const goMonth = async (n) => {
+  calMonth.setMonth(calMonth.getMonth() + n);
+  selDay = null; $("dayCard").hidden = true;
+  renderCal();
+  if (await ensureMonth(calMonth.getFullYear(), calMonth.getMonth())) renderCal();
+};
+$("calPrev").onclick = () => goMonth(-1);
+$("calNext").onclick = () => goMonth(1);
 
 /* ---------- install tip ---------- */
 try {
