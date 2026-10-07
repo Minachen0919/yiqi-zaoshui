@@ -20,6 +20,10 @@ const sinceNoon = (m) => (m - 720 + 1440) % 1440;
 const hhmm = (iso) => { const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const isNightPhase = (d = new Date()) => d.getHours() >= 15 || d.getHours() < 4;
 
+// pick the time-of-day palette right away, before any screen renders
+document.documentElement.classList.toggle("pm", isNightPhase());
+document.documentElement.classList.toggle("am", !isNightPhase());
+
 /* ---------- ui helpers ---------- */
 function toast(t) { const e = $("toast"); e.textContent = t; e.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (e.hidden = true), 2200); }
 function show(view) {
