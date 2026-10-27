@@ -395,7 +395,7 @@ async function renderDiary(refetch = true) {
       const r = rows.find((x) => x.user_id === p.id);
       const color = p.id === me.id ? "var(--me)" : "var(--ta)";
       const head = `<span class="dot" style="background:${color}"></span><div style="min-width:0"><div class="who2">${esc(whoName(p.id))}${r ? " · " + hhmm(r.at) : ""}</div>`;
-      if (!r) return `<div class="line empty">${head}<p>这晚没写</p></div></div>`;
+      if (!r) return `<div class="line empty">${head}<p>${k === today ? "还没写" : "这晚没写"}</p></div></div>`;
       if (k === today && p.id !== me.id && !unlockedTonight) return `<div class="line locked">${head}<p>你也打卡后就能看到</p></div></div>`;
       let text = esc(r.note);
       if (q) text = text.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), (m) => `<mark>${m}</mark>`);
