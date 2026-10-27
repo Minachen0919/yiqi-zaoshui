@@ -354,6 +354,60 @@ function renderStats() {
     `最近 7 晚你们有 ${both} 晚一起达标` + (both > prev ? `，比之前一周多 ${both - prev} 晚。` : both < prev ? `，比之前一周少 ${prev - both} 晚。` : "，和之前一周一样。");
 }
 
+/* ---------- render: diary ---------- */
+let diaryRows = [], diaryShown = 30, diaryBusy = false;
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+async function renderDiary(refetch = true) {
+  if (refetch && !diaryBusy) {
+    diaryBusy = true;
+    const { data } = await sb.from("checkins").select("user_id,night,at,note")
+      .eq("couple_id", me.couple_id).eq("kind", "sleep").not("note", "is", null)
+      .order("night", { ascending: false }).limit(5000);
+    diaryRows = data || [];
+    diaryBusy = false;
+  }
+  const today = nightOf();
+  const mineTonight = rec(me.id, today);
+  const unlockedTonight = !!(mineTonight.sleep || mineTonight.leave);
+  const q = $("diaryQ").value.trim().toLowerCase();
+
+  // group notes by night, newest first
+  const byNight = new Map();
+  for (const r of diaryRows) {
+    if (!byNight.has(r.night)) byNight.set(r.night, []);
+    byNight.get(r.night).push(r);
+  }
+  let nights = [...byNight.keys()];
+  if (q) nights = nights.filter((k) => byNight.get(k).some((r) => r.note.toLowerCase().includes(q) && !(k === today && r.user_id !== me.id && !unlockedTonight)));
+
+  const total = byNight.size;
+  $("diaryCount").textContent = total ? `已经记下 ${total} 个晚上的晚安话` : "每晚的晚安话都会收进这里";
+  $("diaryEmpty").hidden = total > 0;
+  $("diaryEmpty").textContent = "还没有晚安话。睡前打卡时写一句，就会出现在这里";
+  if (q && total && !nights.length) { $("diaryEmpty").hidden = false; $("diaryEmpty").textContent = "没有找到包含这句话的日记"; }
+
+  const people = [me, partner].filter(Boolean);
+  const week = "日一二三四五六";
+  $("diary").innerHTML = nights.slice(0, diaryShown).map((k) => {
+    const d = new Date(k + "T12:00:00");
+    const rows = byNight.get(k);
+    const lines = people.map((p) => {
+      const r = rows.find((x) => x.user_id === p.id);
+      const color = p.id === me.id ? "var(--me)" : "var(--ta)";
+      const head = `<span class="dot" style="background:${color}"></span><div style="min-width:0"><div class="who2">${esc(whoName(p.id))}${r ? " · " + hhmm(r.at) : ""}</div>`;
+      if (!r) return `<div class="line empty">${head}<p>这晚没写</p></div></div>`;
+      if (k === today && p.id !== me.id && !unlockedTonight) return `<div class="line locked">${head}<p>你也打卡后就能看到</p></div></div>`;
+      let text = esc(r.note);
+      if (q) text = text.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), (m) => `<mark>${m}</mark>`);
+      return `<div class="line">${head}<p>${text}</p></div></div>`;
+    }).join("");
+    return `<article class="entry"><div class="eh"><span class="ed">${d.getFullYear() !== new Date().getFullYear() ? d.getFullYear() + " 年 " : ""}${d.getMonth() + 1} 月 ${d.getDate()} 日</span><span class="ew">周${week[d.getDay()]}${k === today ? " · 今晚" : ""}</span></div>${lines}</article>`;
+  }).join("");
+  $("diaryMore").hidden = nights.length <= diaryShown;
+}
+$("diaryQ").oninput = () => { diaryShown = 30; renderDiary(false); };
+$("diaryMore").onclick = () => { diaryShown += 30; renderDiary(false); };
+
 /* ---------- render: settings ---------- */
 function renderSettings() {
   $("s-bed").value = couple.bed_target.slice(0, 5);
@@ -385,6 +439,7 @@ function renderAll() {
   if (!$("p-cal").hidden) renderCal();
   if (!$("p-stats").hidden) renderStats();
   if (!$("p-set").hidden) renderSettings();
+  if (!$("p-diary").hidden) renderDiary();
 }
 
 /* ---------- events: auth ---------- */

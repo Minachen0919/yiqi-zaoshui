@@ -144,6 +144,19 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
 .bars .col{display:flex;gap:3px;align-items:end;justify-content:center;height:100%;position:relative;z-index:1}
 .bars .b{width:10px;border-radius:5px 5px 0 0;min-height:2px}
 .xl{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;text-align:center;font-size:12px;color:var(--muted)}
+/* diary */
+.diary{display:flex;flex-direction:column;gap:12px}
+.entry{background:var(--surface);border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.entry .eh{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.entry .ed{font-weight:700;font-size:16px}
+.entry .ew{font-size:12px;color:var(--muted)}
+.line{display:flex;gap:10px;align-items:flex-start}
+.line .dot{margin-top:7px}
+.line .who2{font-size:12px;color:var(--muted)}
+.line p{margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
+.line.empty p{color:var(--muted);font-size:14px}
+.line.locked p{color:var(--muted);font-size:14px;font-style:italic}
+.entry mark{background:color-mix(in srgb,var(--accent) 30%,transparent);color:inherit;border-radius:3px;padding:0 2px}
 /* settings */
 .set{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
 .set:last-child{border-bottom:0}
@@ -165,7 +178,7 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
 .banner{border-radius:16px;padding:12px 14px;font-size:13px;background:color-mix(in srgb,var(--accent) 12%,transparent);display:flex;gap:10px;justify-content:space-between;align-items:center}
 /* tabs */
 .tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:8px 16px calc(8px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;z-index:5;transition:background .5s}
-.tabs .in{display:grid;grid-template-columns:repeat(4,1fr);width:100%;max-width:440px}
+.tabs .in{display:grid;grid-template-columns:repeat(5,1fr);width:100%;max-width:440px}
 .tab{font:inherit;font-size:12px;background:none;border:0;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px;cursor:pointer;border-radius:10px}
 .tab svg{width:22px;height:22px}
 .tab[aria-selected="true"]{color:var(--accent)}
@@ -342,6 +355,17 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
       </div>
     </section>
 
+    <section id="p-diary" class="page" hidden style="flex-direction:column;gap:16px">
+      <div class="card">
+        <h2>晚安日记</h2>
+        <p class="hint" id="diaryCount">每晚的晚安话都会收进这里</p>
+        <input class="field" id="diaryQ" type="search" placeholder="搜索晚安话" autocomplete="off">
+      </div>
+      <div class="diary" id="diary"></div>
+      <p class="note" id="diaryEmpty" hidden>还没有晚安话。睡前打卡时写一句，就会出现在这里</p>
+      <button class="ghost" id="diaryMore" hidden>加载更早的</button>
+    </section>
+
     <section id="p-set" class="page" hidden style="flex-direction:column;gap:16px">
       <div class="card">
         <h2>我们的约定</h2>
@@ -378,6 +402,7 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
     <button class="tab" role="tab" aria-selected="true" data-p="p-today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>今天</button>
     <button class="tab" role="tab" aria-selected="false" data-p="p-cal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>日历</button>
     <button class="tab" role="tab" aria-selected="false" data-p="p-stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V11M12 20V5M19 20v-6"/></svg>统计</button>
+    <button class="tab" role="tab" aria-selected="false" data-p="p-diary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11M9 8h6"/></svg>日记</button>
     <button class="tab" role="tab" aria-selected="false" data-p="p-set"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>约定</button>
   </div>
 </nav>
