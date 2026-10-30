@@ -534,34 +534,12 @@ async function renderDiary(refetch = true) {
 }
 
 /* --- desk calendar --- */
-let audioCtx = null;
+// a short pre-recorded bubble pop; played through a plain audio element so iPhone doesn't add any hum
+const popSound = new Audio("pop.wav");
+popSound.preload = "auto";
 function ripSound() {
   if (!diarySound) return;
-  try {
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    const ac = audioCtx, now = ac.currentTime;
-    // a soft, round bubble "bloop": a sine that slides up in pitch, warmed by gentle saturation and a low-pass
-    const shaper = ac.createWaveShaper();
-    const curve = new Float32Array(256);
-    for (let i = 0; i < 256; i++) { const x = i / 128 - 1; curve[i] = Math.tanh(1.8 * x) / Math.tanh(1.8); }
-    shaper.curve = curve;
-    const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1800; lp.Q.value = 0.7;
-    const out = ac.createGain(); out.gain.value = 0.22;
-    shaper.connect(lp).connect(out).connect(ac.destination);
-    const bubble = (t, f0, f1, len, vol) => {
-      const o = ac.createOscillator(), g = ac.createGain();
-      o.type = "sine";
-      o.frequency.setValueAtTime(f0, now + t);
-      o.frequency.exponentialRampToValueAtTime(f1, now + t + len * 0.7);
-      g.gain.setValueAtTime(0.0001, now + t);
-      g.gain.exponentialRampToValueAtTime(vol, now + t + 0.012);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + t + len);
-      o.connect(g).connect(shaper);
-      o.start(now + t); o.stop(now + t + len + 0.02);
-    };
-    bubble(0, 260, 620, 0.16, 0.9);      // main pop
-    bubble(0.07, 420, 900, 0.11, 0.45);  // a smaller bubble right after
-  } catch { /* audio unavailable */ }
+  try { popSound.currentTime = 0; const p = popSound.play(); if (p) p.catch(() => {}); } catch { /* audio unavailable */ }
 }
 function seedSvg(n, seed) {
   let s = "", r = seed;
