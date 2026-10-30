@@ -32,9 +32,10 @@
   --ok:#2f9e6f; --warn:#c97f12; --bad:#d6455a; --miss:#f0e0de; --me:#ff4d63; --ta:#d9788a; --skyfg:#141012; --rind:#5dbb8f; --cream:#fff4f1; --seed:#141012; color-scheme:light}
 *{box-sizing:border-box}
 /* the page itself never scrolls or zooms; only #scroller scrolls, so the tab bar can't drift with iOS rubber-banding */
-html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none}
+html,body{margin:0;height:var(--app-h,100%);overflow:hidden;overscroll-behavior:none}
+html{background:var(--bg)}
 body{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
-#scroller{position:fixed;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;padding-top:env(safe-area-inset-top,0px)}
+#scroller{position:fixed;top:0;left:0;right:0;height:var(--app-h,100%);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;padding-top:env(safe-area-inset-top,0px)}
 body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;font-weight:500;line-height:1.55;-webkit-tap-highlight-color:transparent;transition:background .5s,color .5s}
 [hidden]{display:none!important}
 .app{max-width:440px;margin:0 auto;padding:16px 16px calc(110px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:16px}
@@ -241,9 +242,10 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
 .code{font-family:var(--mono);font-size:36px;font-weight:800;letter-spacing:.2em;text-align:center}
 .banner{border-radius:16px;padding:12px 14px;font-size:13px;background:color-mix(in srgb,var(--accent) 12%,transparent);display:flex;gap:10px;justify-content:space-between;align-items:center}
 /* tabs */
-.tabs{position:fixed;left:0;right:0;bottom:0;transform:translateZ(0);background:var(--surface);border-top:1px solid var(--line);padding:8px 16px calc(8px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;z-index:5;transition:background .5s}
+.tabs{position:fixed;left:0;right:0;bottom:0;top:auto;transform:translateZ(0);background:var(--surface);border-top:1px solid var(--line);padding:8px 16px calc(8px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;z-index:5;transition:background .5s}
 .tabs .in{display:grid;grid-template-columns:repeat(5,1fr);width:100%;max-width:440px}
 .tab{font:inherit;font-size:12px;background:none;border:0;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px;cursor:pointer;border-radius:10px}
+html.fitfix .tabs{bottom:auto;top:calc(var(--app-h) - var(--tabs-h,0px))}
 .tab svg{width:24px;height:24px}
 .tab span{font-size:11px;font-weight:800;letter-spacing:.02em}
 .tab .f{fill:none}

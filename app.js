@@ -29,7 +29,24 @@ function toast(t) { const e = $("toast"); e.textContent = t; e.hidden = false; c
 function show(view) {
   for (const v of ["v-boot", "v-auth", "v-reset", "v-pair", "v-main"]) $(v).hidden = v !== view;
   $("tabs").hidden = view !== "v-main";
+  fitScreen();
 }
+// iOS home-screen apps with a translucent status bar can report a layout viewport that is
+// shorter than the screen by the status-bar height, which leaves a black strip under the tab bar.
+// Size the app to the real screen and place the tab bar from the top so it sits on the true bottom.
+function fitScreen() {
+  const root = document.documentElement;
+  const home = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const portrait = window.innerHeight >= window.innerWidth;
+  const screenH = portrait ? Math.max(screen.height, screen.width) : Math.min(screen.height, screen.width);
+  const h = home ? Math.max(screenH, window.innerHeight) : window.innerHeight;
+  root.style.setProperty("--app-h", h + "px");
+  root.classList.toggle("fitfix", home && h > window.innerHeight);
+  const tabs = $("tabs");
+  if (tabs && !tabs.hidden) root.style.setProperty("--tabs-h", tabs.offsetHeight + "px");
+}
+window.addEventListener("resize", fitScreen);
+window.addEventListener("orientationchange", () => setTimeout(fitScreen, 300));
 function setChip(el, cls, txt) { el.className = "chip " + cls; el.textContent = txt; }
 (() => { const s = $("stars"); for (let i = 0; i < 28; i++) { const e = document.createElement("i"); e.style.left = Math.random() * 100 + "%"; e.style.top = Math.random() * 70 + "%"; e.style.opacity = 0.3 + Math.random() * 0.6; s.appendChild(e); } })();
 
@@ -936,6 +953,7 @@ try {
 $("installX").onclick = () => { $("installTip").hidden = true; try { localStorage.setItem("installTipX", "1"); } catch {} };
 
 /* ---------- boot ---------- */
+fitScreen();
 // block pinch-zoom (double-tap zoom is already off via touch-action: manipulation)
 document.addEventListener("gesturestart", (e) => e.preventDefault());
 document.addEventListener("gesturechange", (e) => e.preventDefault());
