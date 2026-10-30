@@ -240,26 +240,145 @@ function renderBet() {
   $("lead").textContent = !partner ? "绑定后开始比赛" : diff > 0 ? `${partner.name} 暂时领先 ${diff} 天${left ? `，还剩 ${left} 天` : ""}` : diff < 0 ? `你暂时领先 ${-diff} 天${left ? `，还剩 ${left} 天` : ""}` : `目前打平${left ? `，还剩 ${left} 天` : ""}`;
 }
 
+/* ---------- watermelon drawing helpers ---------- */
+function sector(cx, cy, r0, r1, a0, a1) {
+  const p = (r, a) => `${(cx + r * Math.cos(a)).toFixed(2)} ${(cy + r * Math.sin(a)).toFixed(2)}`;
+  const lg = a1 - a0 > Math.PI ? 1 : 0;
+  return `M${p(r1, a0)}A${r1} ${r1} 0 ${lg} 1 ${p(r1, a1)}L${p(r0, a1)}A${r0} ${r0} 0 ${lg} 0 ${p(r0, a0)}Z`;
+}
+// half-disc slice with the flat edge on top, centred on (0,0)
+function wmSlice(r, seeds = true) {
+  const f = r * 0.78, c = r * 0.88;
+  let s = `<path d="M${-r} 0a${r} ${r} 0 0 0 ${2 * r} 0z" fill="var(--rind)"/><path d="M${-c} 0a${c} ${c} 0 0 0 ${2 * c} 0z" fill="var(--cream)"/><path d="M${-f} 0a${f} ${f} 0 0 0 ${2 * f} 0z" fill="var(--accent)"/>`;
+  if (seeds) s += [[-0.36, 0.3], [0, 0.48], [0.34, 0.28], [-0.14, 0.62]].map(([x, y]) => `<ellipse class="seed" cx="${x * r}" cy="${y * r}" rx="${r * 0.045}" ry="${r * 0.075}" fill="var(--seed)"/>`).join("");
+  return s;
+}
+function wmWhole(r) {
+  let s = `<circle r="${r}" fill="var(--rind)"/><circle r="${r * 0.9}" fill="var(--cream)"/><circle r="${r * 0.8}" fill="var(--accent)"/>`;
+  for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2, d = r * (i % 2 ? 0.35 : 0.58), x = Math.cos(a) * d, y = Math.sin(a) * d; s += `<ellipse cx="${x}" cy="${y}" rx="${r * 0.04}" ry="${r * 0.07}" transform="rotate(${a * 180 / Math.PI + 90} ${x} ${y})" fill="var(--seed)"/>`; }
+  return s;
+}
+
+/* ---------- check-in animations ---------- */
+const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const NS = "http://www.w3.org/2000/svg";
+const fxQueue = [];
+let fxBusy = false;
+function fx(fn) { fxQueue.push(fn); if (!fxBusy) fxNext(); }
+function fxNext() {
+  const fn = fxQueue.shift();
+  const st = $("fx");
+  if (!fn) { fxBusy = false; st.style.opacity = 0; st.innerHTML = ""; st.style.background = "none"; return; }
+  fxBusy = true;
+  const ms = fn(st);
+  setTimeout(() => {
+    const out = () => { st.style.opacity = 0; st.innerHTML = ""; st.style.background = "none"; fxNext(); };
+    if (reduceMotion()) return out();
+    st.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 450, fill: "forwards" }).onfinish = out;
+  }, ms);
+}
+const fxMsg = (title, sub, color) => `<div class="msg" style="color:${color}">${esc(title)}${sub ? `<small>${esc(sub)}</small>` : ""}</div>`;
+const fadeIn = (el, delay) => setTimeout(() => el.animate([{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: 600, fill: "forwards" }), delay);
+
+function playSleep(title, sub) {
+  fx((st) => {
+    st.innerHTML = `<svg width="200" height="200" viewBox="-100 -100 200 200"><g id="fxMoon">${wmSlice(62)}</g><g id="fxStars"></g></svg>${fxMsg(title, sub, "#fff")}`;
+    st.style.opacity = 1;
+    const m = st.querySelector(".msg");
+    if (reduceMotion()) { st.style.background = "#0e0b0c"; m.style.opacity = 1; st.querySelector("#fxMoon").setAttribute("transform", "rotate(-28)"); return 1800; }
+    st.animate([{ background: "rgba(14,11,12,0)" }, { background: "rgba(14,11,12,.97)" }], { duration: 900, fill: "forwards", easing: "ease-out" });
+    st.querySelector("#fxMoon").animate([{ transform: "translate(0px,260px) rotate(20deg)", opacity: 0 }, { transform: "translate(0px,0px) rotate(-28deg)", opacity: 1 }], { duration: 1100, easing: "cubic-bezier(.2,.8,.2,1)", fill: "forwards" });
+    const stars = st.querySelector("#fxStars");
+    [...st.querySelectorAll(".seed")].forEach((sd, i) => setTimeout(() => {
+      const s = document.createElementNS(NS, "circle"), x = (Math.random() - 0.5) * 150, y = -60 - Math.random() * 40;
+      s.setAttribute("r", "2.4"); s.setAttribute("fill", "#fff"); stars.appendChild(s);
+      sd.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, fill: "forwards" });
+      s.animate([{ transform: "translate(0px,10px) scale(.6)", opacity: 0 }, { transform: `translate(${x}px,${y}px) scale(1)`, opacity: 1, offset: 0.7 }, { transform: `translate(${x}px,${y}px) scale(1.5)`, opacity: 0.6 }], { duration: 1300, easing: "ease-out", fill: "forwards" });
+    }, 1000 + i * 180));
+    fadeIn(m, 1900);
+    return 3400;
+  });
+}
+function playWake(title, sub) {
+  fx((st) => {
+    let rays = "";
+    for (let i = 0; i < 9; i++) { const a = Math.PI + i / 8 * Math.PI; rays += `<line class="ray" x1="${Math.cos(a) * 78}" y1="${Math.sin(a) * 78}" x2="${Math.cos(a) * 102}" y2="${Math.sin(a) * 102}" stroke="var(--accent)" stroke-width="5" stroke-linecap="round" opacity="0"/>`; }
+    st.innerHTML = `<svg width="240" height="170" viewBox="-120 -110 240 140"><g>${rays}</g><g id="fxSun"><g transform="scale(1,-1)">${wmSlice(66)}</g></g><line x1="-110" y1="2" x2="110" y2="2" stroke="#141012" stroke-width="3" stroke-linecap="round" opacity=".25"/></svg>${fxMsg(title, sub, "#141012")}`;
+    st.style.opacity = 1;
+    const m = st.querySelector(".msg");
+    if (reduceMotion()) { st.style.background = "#fff4f1"; m.style.opacity = 1; st.querySelectorAll(".ray").forEach((r) => r.setAttribute("opacity", 1)); return 1800; }
+    st.animate([{ background: "#0e0b0c" }, { background: "#3a1820", offset: 0.35 }, { background: "#ffd6d0", offset: 0.7 }, { background: "#fff4f1" }], { duration: 1600, fill: "forwards", easing: "ease-in-out" });
+    const sun = st.querySelector("#fxSun");
+    sun.style.clipPath = "inset(-200px -200px 47% -200px)";
+    sun.animate([{ transform: "translateY(80px)" }, { transform: "translateY(0px)" }], { duration: 1400, easing: "cubic-bezier(.2,.8,.2,1)", fill: "forwards" });
+    st.querySelectorAll(".ray").forEach((r, i) => r.animate([{ opacity: 0, transform: "scale(.7)" }, { opacity: 1, transform: "scale(1)" }], { duration: 500, delay: 1200 + i * 60, fill: "forwards", easing: "ease-out" }));
+    fadeIn(m, 1700);
+    return 3400;
+  });
+}
+function playBoth(title, sub) {
+  fx((st) => {
+    st.innerHTML = `<svg width="220" height="220" viewBox="-110 -110 220 220"><g id="fxL"><g transform="rotate(90)">${wmSlice(70, false)}</g></g><g id="fxR"><g transform="rotate(-90)">${wmSlice(70, false)}</g></g><g id="fxW" opacity="0">${wmWhole(70)}</g></svg>${fxMsg(title, sub, "#fff")}`;
+    st.style.background = "rgba(14,11,12,.96)";
+    st.style.opacity = 1;
+    const L = st.querySelector("#fxL"), R = st.querySelector("#fxR"), W = st.querySelector("#fxW"), m = st.querySelector(".msg");
+    if (reduceMotion()) { L.style.opacity = 0; R.style.opacity = 0; W.setAttribute("opacity", 1); m.style.opacity = 1; return 1800; }
+    L.animate([{ transform: "translateX(-180px) rotate(-30deg)" }, { transform: "translateX(-6px) rotate(0deg)", offset: 0.85 }, { transform: "translateX(0px)" }], { duration: 900, easing: "cubic-bezier(.3,.9,.3,1)", fill: "forwards" });
+    R.animate([{ transform: "translateX(180px) rotate(30deg)" }, { transform: "translateX(6px) rotate(0deg)", offset: 0.85 }, { transform: "translateX(0px)" }], { duration: 900, easing: "cubic-bezier(.3,.9,.3,1)", fill: "forwards" });
+    setTimeout(() => {
+      L.style.opacity = 0; R.style.opacity = 0; W.setAttribute("opacity", 1);
+      W.animate([{ transform: "scale(1)" }, { transform: "scale(1.15)" }, { transform: "scale(.96)" }, { transform: "scale(1)" }], { duration: 600, easing: "ease-out" });
+    }, 900);
+    fadeIn(m, 900);
+    return 3100;
+  });
+}
+
 /* ---------- render: calendar ---------- */
 function renderCal() {
   if (!calMonth) { const t = new Date(nightOf() + "T12:00:00"); calMonth = new Date(t.getFullYear(), t.getMonth(), 1); }
   const y = calMonth.getFullYear(), m = calMonth.getMonth();
   $("calTitle").textContent = `${y} 年 ${m + 1} 月`;
   const today = nightOf();
-  const first = (new Date(y, m, 1).getDay() + 6) % 7;
   const total = new Date(y, m + 1, 0).getDate();
-  let html = "一二三四五六日".split("").map((d) => `<div class="h">${d}</div>`).join("") + "<div></div>".repeat(first);
+  // the month is one watermelon cross-section: one wedge per day, inner ring = me, outer ring = TA
+  const c = 200, gap = 0.012;
+  const fillOf = (s) => s === "ok" ? "var(--accent)" : s === "miss" ? "var(--miss)" : s === "pending" ? "var(--line)" : "none";
+  const strokeOf = (s) => s === "leave" ? 'stroke="var(--warn)" stroke-dasharray="3 2" stroke-width="1.2"' : "";
+  let wedges = "", together = 0;
   for (let d = 1; d <= total; d++) {
     const key = `${y}-${pad(m + 1)}-${pad(d)}`;
     const future = key > today;
     const a = future ? "" : status(me.id, key), b = future || !partner ? "" : status(partner.id, key);
-    const dot = (s, color) => s === "ok" ? `<i style="background:${color}"></i>` : s === "leave" ? `<i class="lv"></i>` : s ? "<i></i>" : "";
-    const cls = `day${key === today ? " today" : ""}${future ? " future" : ""}${a === "ok" && b === "ok" ? " full" : ""}${key === selDay ? " sel" : ""}`;
-    const inner = `<span>${d}</span><span class="m">${dot(a, "var(--me)")}${partner ? dot(b, "var(--ta)") : ""}</span>`;
-    html += future ? `<div class="${cls}">${inner}</div>` : `<button class="${cls}" data-k="${key}" aria-label="${m + 1} 月 ${d} 日">${inner}</button>`;
+    if (a === "ok" && b === "ok") together++;
+    const a0 = -Math.PI / 2 + (d - 1) / total * Math.PI * 2 + gap, a1 = -Math.PI / 2 + d / total * Math.PI * 2 - gap;
+    const blank = "color-mix(in srgb, var(--line) 55%, transparent)";
+    let g = `<path d="${sector(c, c, 62, 118, a0, a1)}" fill="${future ? blank : fillOf(a)}" ${strokeOf(a)}/>
+      <path d="${sector(c, c, 121, 166, a0, a1)}" fill="${future || !partner ? blank : fillOf(b)}" ${strokeOf(b)}/>`;
+    if (a === "ok" && b === "ok") {
+      const am = (a0 + a1) / 2, r = 142, x = c + r * Math.cos(am), yy = c + r * Math.sin(am);
+      g += `<ellipse cx="${x}" cy="${yy}" rx="2.4" ry="4" transform="rotate(${am * 180 / Math.PI + 90} ${x} ${yy})" fill="var(--seed)"/>`;
+    }
+    if (key === today || key === selDay) g += `<path d="${sector(c, c, 60, 168, a0 - gap, a1 + gap)}" fill="none" stroke="var(--fg)" stroke-width="${key === selDay ? 2.5 : 1.5}" ${key === today && key !== selDay ? 'stroke-dasharray="4 3"' : ""}/>`;
+    if (d === 1 || d % 5 === 0) { const am = (a0 + a1) / 2, r = 191; g += `<text x="${c + r * Math.cos(am)}" y="${c + r * Math.sin(am) + 4}" text-anchor="middle" font-size="12" font-weight="800" fill="var(--muted)">${d}</text>`; }
+    wedges += future ? `<g aria-hidden="true">${g}</g>` : `<g class="wedge" data-k="${key}" tabindex="0" role="button" aria-label="${m + 1} 月 ${d} 日">${g}</g>`;
   }
-  $("cal").innerHTML = html;
-  $("cal").querySelectorAll("button[data-k]").forEach((b) => (b.onclick = () => selectDay(b.dataset.k)));
+  let center = `<text x="${c}" y="${c - 2}" text-anchor="middle" font-size="34" font-weight="900" fill="var(--fg)">${together}</text>
+    <text x="${c}" y="${c + 22}" text-anchor="middle" font-size="12" font-weight="700" fill="var(--muted)">天一起达标</text>`;
+  if (selDay && selDay.startsWith(`${y}-${pad(m + 1)}`)) {
+    const sa = status(me.id, selDay), sb2 = partner ? status(partner.id, selDay) : "";
+    const word = sa === "ok" && sb2 === "ok" ? "一起达标" : sa === "leave" || sb2 === "leave" ? "有人请假" : sa === "pending" || sb2 === "pending" ? "进行中" : "有人没达标";
+    center = `<text x="${c}" y="${c - 2}" text-anchor="middle" font-size="34" font-weight="900" fill="var(--fg)">${Number(selDay.slice(8))}</text>
+      <text x="${c}" y="${c + 22}" text-anchor="middle" font-size="12" font-weight="700" fill="var(--muted)">${word}</text>`;
+  }
+  $("cal").innerHTML = `<div class="melon"><svg viewBox="0 0 400 400" role="img" aria-label="${m + 1} 月，${together} 天一起达标">
+    <circle cx="${c}" cy="${c}" r="181" fill="var(--rind)"/><circle cx="${c}" cy="${c}" r="172.5" fill="var(--cream)"/><circle cx="${c}" cy="${c}" r="169" fill="var(--surface)"/>
+    ${wedges}
+    <circle cx="${c}" cy="${c}" r="56" fill="var(--surface)"/>${center}</svg></div>`;
+  $("cal").querySelectorAll(".wedge").forEach((w) => {
+    w.onclick = () => selectDay(w.dataset.k);
+    w.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectDay(w.dataset.k); } };
+  });
   $("lgMe").textContent = me.name || "我"; $("lgTa").textContent = partner?.name || "TA";
   renderAlbum(y, m);
   if (selDay) renderDay(selDay);
@@ -304,8 +423,7 @@ async function renderAlbum(y, m) {
 }
 function selectDay(key) {
   selDay = key;
-  $("cal").querySelectorAll("button.day").forEach((b) => b.classList.toggle("sel", b.dataset.k === key));
-  renderDay(key);
+  renderCal();
   $("dayCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 async function renderDay(key) {
@@ -328,7 +446,7 @@ async function renderDay(key) {
   const urls = await signed(list.map((c) => c.photo_path));
   $("dayPhotos").innerHTML = list.map((c, i) => `<figure><img alt="${whoName(c.user_id)}的早安照片" src="${urls[i]}"><figcaption>${whoName(c.user_id)} · ${hhmm(c.at)}</figcaption></figure>`).join("");
 }
-$("dayClose").onclick = () => { selDay = null; $("dayCard").hidden = true; $("cal").querySelectorAll("button.day").forEach((b) => b.classList.remove("sel")); };
+$("dayClose").onclick = () => { selDay = null; $("dayCard").hidden = true; renderCal(); };
 
 /* ---------- render: stats ---------- */
 function renderStats() {
@@ -523,7 +641,11 @@ $("mainBtn").onclick = async () => {
   if (isNightPhase()) {
     const note = $("gnInput").value.trim() || null;
     const r = await checkIn("sleep", { note });
-    if (r) { $("gnInput").value = ""; toast(partner ? "已打卡，TA 会收到通知" : "已打卡"); }
+    if (r) {
+      $("gnInput").value = "";
+      const t = partner ? rec(partner.id, r.night) : {};
+      playSleep(`晚安，${me.name || ""}`.trim(), !partner ? "" : (t.sleep || t.leave) ? "TA 也躺下了，晚安话已解锁" : "TA 会收到通知，等 TA 也躺下");
+    }
   } else {
     let photo_path = null;
     const f = $("photoInput").files[0];
@@ -537,7 +659,18 @@ $("mainBtn").onclick = async () => {
       } catch { photo_path = null; }
     }
     const r = await checkIn("wake", { photo_path });
-    if (r) { $("photoInput").value = ""; $("photoLbl").textContent = "附一张早安照片（可选）"; toast("早上好"); }
+    if (r) {
+      $("photoInput").value = ""; $("photoLbl").textContent = "附一张早安照片（可选）";
+      const mine = rec(me.id, r.night);
+      let sub = "";
+      if (mine.sleep) { const h = (new Date(r.at) - new Date(mine.sleep.at)) / 3600e3; sub = `昨晚睡了 ${Math.floor(h)} 小时 ${Math.round((h % 1) * 60)} 分钟`; }
+      playWake("早上好", sub);
+      const t = partner ? rec(partner.id, r.night) : {};
+      if (t.wake || t.leave) {
+        const n = streak();
+        playBoth(n > 0 ? `第 ${n} 天` : "今天完成", n > 0 ? "你们俩都完成了今天的打卡" : "你们俩都起床了");
+      }
+    }
   }
   renderAll();
 };

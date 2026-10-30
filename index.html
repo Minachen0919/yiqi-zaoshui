@@ -25,11 +25,11 @@
 :root.pm{
   --bg:#0e0b0c; --surface:#1c1517; --fg:#ffffff; --muted:#b3a1a5; --line:#2e2326;
   --night:#141012; --night2:#3a1820; --accent:#ff4d63; --accent-fg:#ffffff;
-  --ok:#6fd3a5; --warn:#f5b75a; --bad:#ff8a98; --miss:#33272a; --me:#ff4d63; --ta:#ffc2c9; --skyfg:#ffffff; color-scheme:dark}
+  --ok:#6fd3a5; --warn:#f5b75a; --bad:#ff8a98; --miss:#33272a; --me:#ff4d63; --ta:#ffc2c9; --skyfg:#ffffff; --rind:#68c49a; --cream:#fff4f1; --seed:#141012; color-scheme:dark}
 :root.am{
   --bg:#fff4f1; --surface:#ffffff; --fg:#141012; --muted:#7d6b6f; --line:#f2e0de;
   --dawn:#ffd6d0; --dawn2:#fff4f1; --accent:#ff4d63; --accent-fg:#ffffff;
-  --ok:#2f9e6f; --warn:#c97f12; --bad:#d6455a; --miss:#f0e0de; --me:#ff4d63; --ta:#d9788a; --skyfg:#141012; color-scheme:light}
+  --ok:#2f9e6f; --warn:#c97f12; --bad:#d6455a; --miss:#f0e0de; --me:#ff4d63; --ta:#d9788a; --skyfg:#141012; --rind:#5dbb8f; --cream:#fff4f1; --seed:#141012; color-scheme:light}
 *{box-sizing:border-box}
 html,body{margin:0;min-height:100%}
 html{padding:env(safe-area-inset-top,0px) 0 0}
@@ -117,7 +117,7 @@ textarea.field{resize:none;min-height:44px}
 .lead{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
 /* calendar */
 .calhead{display:flex;justify-content:space-between;align-items:center}
-.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;text-align:center}
+.cal{display:block}
 .cal .h{font-size:12px;color:var(--muted)}
 .album{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .album button{border:0;padding:0;background:var(--line);border-radius:10px;overflow:hidden;position:relative;aspect-ratio:3/4;cursor:pointer}
@@ -146,6 +146,16 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
 .bars .b{width:10px;border-radius:5px 5px 0 0;min-height:2px}
 .xl{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;text-align:center;font-size:12px;color:var(--muted)}
 .page{display:flex;flex-direction:column;gap:16px}
+/* watermelon calendar */
+.melon{width:100%;max-width:400px;margin:0 auto}
+.melon svg{width:100%;height:auto;display:block}
+.melon .wedge{cursor:pointer;outline:none}
+.melon .wedge:focus-visible path{stroke:var(--fg);stroke-width:2}
+/* check-in animation overlay */
+#fx{position:fixed;inset:0;z-index:20;pointer-events:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;opacity:0}
+#fx svg{overflow:visible}
+#fx .msg{font-weight:900;font-size:24px;text-align:center;opacity:0;padding:0 24px}
+#fx .msg small{display:block;font-size:14px;font-weight:700;opacity:.75;margin-top:6px}
 /* diary */
 .diary{display:flex;flex-direction:column;gap:12px}
 .entry{background:var(--surface);border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px}
@@ -327,13 +337,13 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
         </div>
         <div class="cal" id="cal"></div>
         <div class="legend">
-          <span><i class="dot" style="background:var(--me)"></i><span id="lgMe">我</span>达标</span>
-          <span><i class="dot" style="background:var(--ta)"></i><span id="lgTa">TA</span>达标</span>
-          <span><i style="width:14px;height:14px;border-radius:4px;background:color-mix(in srgb,var(--accent) 18%,transparent)"></i>一起成功</span>
-          <span><i class="dot" style="border:1px dashed var(--warn)"></i>请假</span>
+          <span><i style="width:14px;height:14px;border-radius:4px;background:var(--accent)"></i>内圈 <span id="lgMe">我</span>，外圈 <span id="lgTa">TA</span>，一天一瓣</span>
+          <span><i style="width:14px;height:14px;border-radius:4px;background:var(--miss)"></i>没达标</span>
+          <span><i style="width:14px;height:14px;border-radius:4px;border:1.5px dashed var(--warn)"></i>请假</span>
+          <span><i class="dot" style="background:var(--seed);box-shadow:0 0 0 2px var(--accent)"></i>都达标的那瓣长出西瓜籽</span>
         </div>
       </div>
-      <p class="note">点日期可以看那天的详情 · 达标 = 按时睡且按时起</p>
+      <p class="note">点任意一瓣看那天的详情 · 达标 = 按时睡且按时起</p>
 
       <div class="card" id="dayCard" hidden>
         <div class="calhead"><h2 id="dayTitle"></h2><button class="ghost sm" id="dayClose">收起</button></div>
@@ -421,6 +431,7 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
   </div>
 </nav>
 <div class="toast" id="toast" hidden></div>
+<div id="fx" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
