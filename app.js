@@ -96,7 +96,7 @@ async function loadAll() {
   ]);
   couple = c;
   partner = (people || []).find((p) => p.id !== me.id) || null;
-  await loadCheckins();
+  await Promise.all([loadCheckins(), loadGarden()]);
   subscribe();
   show("v-main");
   renderAll();
@@ -111,6 +111,8 @@ function subscribe() {
   channel = sb.channel("couple-" + me.couple_id)
     .on("postgres_changes", { event: "*", schema: "public", table: "checkins", filter: `couple_id=eq.${me.couple_id}` }, async () => { await loadCheckins(); renderAll(); })
     .on("postgres_changes", { event: "UPDATE", schema: "public", table: "couples", filter: `id=eq.${me.couple_id}` }, (p) => { couple = p.new; renderAll(); })
+    .on("postgres_changes", { event: "*", schema: "public", table: "plantings", filter: `couple_id=eq.${me.couple_id}` }, async () => { await loadGarden(); renderAll(); })
+    .on("postgres_changes", { event: "*", schema: "public", table: "harvests", filter: `couple_id=eq.${me.couple_id}` }, async () => { await loadGarden(); renderAll(); celebrate(); })
     .subscribe();
 }
 async function refreshPartner() {
@@ -216,9 +218,16 @@ function renderToday() {
   gn.classList.toggle("unlocked", unlocked);
   $("shackle").setAttribute("d", unlocked ? "M8 11V8a4 4 0 0 1 7.5-2" : "M8 11V8a4 4 0 0 1 8 0v3");
   $("gnText").textContent = text;
+  // TA's note arrives as a letter: it opens by itself once, and the box reopens it
+  const letterNote = night && unlocked && partner && theirs.sleep?.note ? theirs.sleep : null;
+  gn.classList.toggle("letter", !!letterNote);
+  gn.onclick = letterNote ? () => openLetter(letterNote) : null;
+  if (letterNote) { $("gnText").textContent = `${partner.name} 给你写了一封晚安信`; maybeLetter(letterNote); }
 
   renderPhotos(key, night);
   renderBet();
+  renderGardenCard();
+  checkHarvest();
 }
 
 async function renderPhotos(key, night) {
@@ -530,12 +539,28 @@ function ripSound() {
   if (!diarySound) return;
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    const len = 0.32, buf = audioCtx.createBuffer(1, audioCtx.sampleRate * len, audioCtx.sampleRate), d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) { const t = i / d.length; d[i] = (Math.random() * 2 - 1) * (Math.random() < 0.08 ? 1 : 0.35) * Math.pow(1 - t, 1.6); }
-    const src = audioCtx.createBufferSource(); src.buffer = buf;
-    const bp = audioCtx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 2600; bp.Q.value = 0.8;
-    const g = audioCtx.createGain(); g.gain.value = 0.35;
-    src.connect(bp).connect(g).connect(audioCtx.destination); src.start();
+    const ac = audioCtx, now = ac.currentTime;
+    // a soft, round bubble "bloop": a sine that slides up in pitch, warmed by gentle saturation and a low-pass
+    const shaper = ac.createWaveShaper();
+    const curve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) { const x = i / 128 - 1; curve[i] = Math.tanh(1.8 * x) / Math.tanh(1.8); }
+    shaper.curve = curve;
+    const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1800; lp.Q.value = 0.7;
+    const out = ac.createGain(); out.gain.value = 0.22;
+    shaper.connect(lp).connect(out).connect(ac.destination);
+    const bubble = (t, f0, f1, len, vol) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = "sine";
+      o.frequency.setValueAtTime(f0, now + t);
+      o.frequency.exponentialRampToValueAtTime(f1, now + t + len * 0.7);
+      g.gain.setValueAtTime(0.0001, now + t);
+      g.gain.exponentialRampToValueAtTime(vol, now + t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + t + len);
+      o.connect(g).connect(shaper);
+      o.start(now + t); o.stop(now + t + len + 0.02);
+    };
+    bubble(0, 260, 620, 0.16, 0.9);      // main pop
+    bubble(0.07, 420, 900, 0.11, 0.45);  // a smaller bubble right after
   } catch { /* audio unavailable */ }
 }
 function seedSvg(n, seed) {
@@ -715,6 +740,246 @@ $("dSound").onclick = () => {
   toast(diarySound ? "撕页声音已打开" : "撕页声音已关闭");
 };
 
+/* ---------- garden: the melon you are growing, the seed bag, the collection ---------- */
+let planting = null, harvests = [], gardenView = "bag", gardenPick = null, harvesting = false;
+async function loadGarden() {
+  const [{ data: p }, { data: h }] = await Promise.all([
+    sb.from("plantings").select("*").eq("couple_id", me.couple_id).eq("status", "growing").maybeSingle(),
+    sb.from("harvests").select("*").eq("couple_id", me.couple_id).order("created_at"),
+  ]);
+  planting = p || null; harvests = h || [];
+}
+const bedMinOf = (c) => sinceNoon(c.local_min);
+// nights since planting where you both made it; a miss starts the count over, a leave night is skipped
+function growth(pl) {
+  const need = Melon.byName[pl.seed]?.need || 7;
+  const run = [];
+  if (!partner) return { need, run };
+  const today = nightOf();
+  for (let k = pl.started_night; k <= today; k = addDays(k, 1)) {
+    const a = status(me.id, k), b = status(partner.id, k);
+    if (a === "pending" || b === "pending") break;
+    if (a === "ok" && b === "ok") run.push(k);
+    else if ((a === "ok" || a === "leave") && (b === "ok" || b === "leave")) continue;
+    else run.length = 0;
+    if (run.length >= need) break;
+  }
+  return { need, run: run.slice(0, need) };
+}
+// "ok" = challenge met, "pending" = still possible, "fail" = can no longer be met (will grow into Classic Red)
+function challengeState(name, run, need) {
+  const T = sinceNoon(toMin(couple.bed_target));
+  const S = (u, k) => rec(u, k).sleep;
+  const both = (k, f) => [me.id, partner.id].every((u) => { const c = S(u, k); return c && f(c); });
+  const done = () => (run.length >= need ? "ok" : "pending");
+  const every = (f) => (run.every(f) ? done() : "fail");
+  const atLeast = (count, n) => (count >= n ? done() : count + (need - run.length) < n ? "fail" : "pending");
+  const leaveFree = () => !run.length || !checkins.some((c) => c.kind === "leave" && c.night >= run[0] && c.night <= run[run.length - 1]);
+  const before = (hm) => (c) => bedMinOf(c) <= sinceNoon(hm);
+  const early = (m) => (c) => bedMinOf(c) <= T - m;
+  const note = (c) => !!(c.note && c.note.trim());
+  switch (name) {
+    case "Seedless": return leaveFree() ? done() : "fail";
+    case "Xiaolan": return every((k) => both(k, early(10)));
+    case "Milky Pink": return every((k) => both(k, note));
+    case "Black Beauty": return atLeast(run.filter((k) => both(k, before(23 * 60 + 15))).length, 5);
+    case "Square": {
+      for (const u of [me.id, partner.id]) { const v = run.map((k) => bedMinOf(S(u, k))); if (v.length && Math.max(...v) - Math.min(...v) > 15) return "fail"; }
+      return done();
+    }
+    case "Starseed": return every((k) => both(k, before(23 * 60)));
+    case "Twins": return every((k) => Math.abs(bedMinOf(S(me.id, k)) - bedMinOf(S(partner.id, k))) < 10);
+    case "Glow": return every((k) => both(k, (c) => before(23 * 60)(c) && note(c)));
+    case "Golden": return leaveFree() ? every((k) => both(k, (c) => early(10)(c) && note(c))) : "fail";
+    case "Crown Melon": {
+      const firsts = run.map((k) => { const a = rec(me.id, k).wake, b = rec(partner.id, k).wake; return a && b ? (a.at <= b.at ? "a" : "b") : ""; });
+      return atLeast(Math.max(firsts.filter((x) => x === "a").length, firsts.filter((x) => x === "b").length), 5);
+    }
+    case "Strawberry Melon": {
+      const n = checkins.filter((c) => c.kind === "wake" && c.photo_path && run.includes(c.night)).length;
+      return n >= 3 ? done() : n + 2 * (need - run.length) < 3 ? "fail" : "pending";
+    }
+    case "Ribbon Melon": {
+      const notes = run.flatMap((k) => [S(me.id, k)?.note, S(partner.id, k)?.note]);
+      if (notes.some((n) => !n || !n.trim()) || new Set(notes.map((n) => n.trim())).size !== notes.length) return "fail";
+      return done();
+    }
+    case "Twinkle Melon": return atLeast(run.filter((k) => both(k, before(22 * 60 + 30))).length, 3);
+    case "Angel Melon": return leaveFree() ? every((k) => both(k, early(15))) : "fail";
+    default: return done();
+  }
+}
+async function checkHarvest() {
+  if (!planting || !partner || harvesting) return;
+  const g = growth(planting);
+  if (g.run.length < g.need) return;
+  harvesting = true;
+  try {
+    const it = Melon.byName[planting.seed];
+    const st = it && it.challenge ? challengeState(planting.seed, g.run, g.need) : "ok";
+    const result = st === "ok" ? planting.seed : "Classic Red";
+    // both phones may try at once; the unique planting_id lets only one harvest through
+    await sb.from("harvests").insert({ couple_id: me.couple_id, planting_id: planting.id, seed: planting.seed, result, night: g.run[g.run.length - 1] });
+    await sb.from("plantings").update({ status: "done" }).eq("id", planting.id).eq("status", "growing");
+    await loadGarden();
+  } finally { harvesting = false; }
+  renderAll(); celebrate();
+}
+function celebrate() {
+  const last = harvests[harvests.length - 1];
+  if (!last || Date.now() - new Date(last.created_at) > 3 * 86400e3) return;
+  let seen = ""; try { seen = localStorage.getItem("seenHarvest") || ""; } catch { /* storage unavailable */ }
+  if (seen === last.id) return;
+  try { localStorage.setItem("seenHarvest", last.id); } catch { /* storage unavailable */ }
+  playHarvest(last);
+}
+function playHarvest(h) {
+  const it = Melon.byName[h.result] || Melon.byName["Classic Red"];
+  const missed = h.result !== h.seed;
+  const seedName = Melon.byName[h.seed]?.name || h.seed;
+  fx((st) => {
+    st.innerHTML = `<div class="hv"><div class="hv-rays"></div><div class="hv-art">${Melon.draw(it)}</div></div>${fxMsg(missed ? "长成了 Classic Red" : `收获了 ${it.name}！`, missed ? `${seedName} 的挑战这次没做到，下次再试试` : `${it.cn || ""} · 已经放进收藏册`, "#fff")}`;
+    st.style.background = "rgba(14,11,12,.96)"; st.style.opacity = 1;
+    const m = st.querySelector(".msg");
+    if (reduceMotion()) { m.style.opacity = 1; return 2400; }
+    st.querySelector(".hv-art").animate([{ transform: "scale(.2) rotate(-20deg)", opacity: 0 }, { transform: "scale(1.12) rotate(4deg)", opacity: 1, offset: 0.7 }, { transform: "scale(1)", opacity: 1 }], { duration: 800, easing: "cubic-bezier(.3,1.4,.5,1)", fill: "forwards" });
+    st.querySelector(".hv-rays").animate([{ transform: "rotate(0deg)", opacity: 0 }, { opacity: 1, offset: 0.2 }, { transform: "rotate(60deg)", opacity: 0.8 }], { duration: 3200, fill: "forwards" });
+    fadeIn(m, 700);
+    return 3400;
+  });
+}
+
+/* home card: what is growing tonight */
+function renderGardenCard() {
+  const el = $("gardenCard");
+  if (!partner) { el.hidden = true; return; }
+  el.hidden = false;
+  if (!planting) {
+    el.innerHTML = `<div class="gc-art">${Melon.growSvg(0)}</div><div class="gc-info"><span class="label">Melon Garden</span><b>还没种西瓜</b><span class="gc-sub">挑一颗种子种下，你们一起达标几晚，它就长大几步</span><button class="pill main" id="gcGo" type="button">去挑种子</button></div>`;
+  } else {
+    const it = Melon.byName[planting.seed] || Melon.byName["Classic Red"], g = growth(planting), p = g.run.length;
+    const cs = it.challenge ? challengeState(it.name, g.run, g.need) : null;
+    const chip = !cs ? "" : cs === "fail" ? '<span class="chip late">这次没做到，会长成 Classic Red</span>' : cs === "ok" ? '<span class="chip ok">挑战完成</span>' : '<span class="chip wait">挑战进行中</span>';
+    el.innerHTML = `<div class="gc-art">${Melon.growSvg(Math.round((p / g.need) * 6))}</div><div class="gc-info">
+      <span class="label">正在种 · 第 ${p} / ${g.need} 晚</span><b>${esc(it.name)} <small>${esc(it.cn || "")}</small></b>
+      <div class="gdots">${Array.from({ length: g.need }, (_, i) => `<i class="${i < p ? "on" : ""}"></i>`).join("")}</div>
+      <span class="gc-sub">${it.challenge ? "挑战：" + esc(it.challenge) : "没有额外挑战，一起达标就会长大"}</span>${chip}
+      <button class="pill" id="gcGo" type="button">种子袋 · 收藏册</button></div>`;
+  }
+  $("gcGo").onclick = () => openGarden(planting ? "collection" : "bag");
+}
+
+/* the garden page */
+function openGarden(view) {
+  gardenView = view || gardenView;
+  document.querySelectorAll(".page").forEach((p) => (p.hidden = p.id !== "p-garden"));
+  document.querySelectorAll(".tab").forEach((x) => x.setAttribute("aria-selected", "false"));
+  renderGarden();
+  $("scroller").scrollTo(0, 0);
+}
+function renderGarden() {
+  document.querySelectorAll("#p-garden .seg button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.gv === gardenView));
+  gardenView === "bag" ? renderBag() : renderCollection();
+}
+function renderBag() {
+  const items = Melon.items;
+  if (!gardenPick) gardenPick = planting ? planting.seed : "Classic Red";
+  const g = planting ? growth(planting) : null;
+  $("gardenBody").innerHTML = `
+    <p class="note" style="text-align:left">每颗种子一开始就都有。普通的一起达标几晚就能收获；带挑战的要在这几晚里做到，没做到就长成一颗 Classic Red。</p>
+    <div class="packets" id="packets" role="listbox" aria-label="种子">${items.map((x) => {
+      const rc = Melon.R[x.r][1];
+      return `<button class="packet" role="option" type="button" aria-selected="${x.name === gardenPick}" data-n="${esc(x.name)}" aria-label="${esc(x.name)} 种子">
+        <div class="bag"><div class="win">${Melon.draw(x)}</div><div class="pn">${esc(x.name)}</div><div class="pd">${x.need} nights</div><span class="rb" style="background:${rc}"></span></div>
+        ${planting && planting.seed === x.name ? '<span class="growing">种植中</span>' : ""}</button>`;
+    }).join("")}</div>
+    <div id="pick"></div>`;
+  document.querySelectorAll(".packet").forEach((b) => (b.onclick = () => { gardenPick = b.dataset.n; renderBag(); }));
+  const sel = document.querySelector('.packet[aria-selected="true"]');
+  if (sel) $("packets").scrollLeft = sel.offsetLeft - 24;
+  const x = Melon.byName[gardenPick], [rl, rc] = Melon.R[x.r];
+  let btn;
+  if (!partner) btn = '<button class="pill main" disabled type="button">绑定 TA 之后才能种</button>';
+  else if (!planting) btn = '<button class="pill main" id="plantBtn" type="button">种下这颗</button>';
+  else if (planting.seed === x.name) btn = `<button class="pill main" disabled type="button">正在种 · 第 ${g.run.length} / ${g.need} 晚</button>`;
+  else if (g.run.length === 0) btn = '<button class="pill main" id="plantBtn" type="button">换成这颗</button>';
+  else btn = `<button class="pill main" disabled type="button">${esc(planting.seed)} 长完才能换</button>`;
+  $("pick").innerHTML = `<div class="pick"><div class="art">${Melon.draw(x)}</div><div class="info">
+    <h3>${esc(x.name)} <span class="chip" style="color:${rc};background:color-mix(in srgb,${rc} 16%,transparent)">${rl}</span></h3>
+    <span class="gc-sub">${esc(x.cn || "")} · ${esc(x.tag || "")}</span>
+    <div class="kvs"><div class="kv">要长<b>${x.need} 晚</b></div><div class="kv">挑战<b>${esc(x.challenge || "没有，一起达标就行")}</b></div></div>
+    ${btn}</div></div>`;
+  const pb = $("plantBtn");
+  if (pb) pb.onclick = async () => {
+    pb.disabled = true;
+    const res = planting
+      ? await sb.from("plantings").update({ seed: x.name, started_night: nightOf() }).eq("id", planting.id)
+      : await sb.from("plantings").insert({ couple_id: me.couple_id, seed: x.name, started_night: nightOf() });
+    if (res.error) { toast(/duplicate|unique/i.test(res.error.message) ? "TA 刚刚已经种下了一颗" : "种下失败，请重试"); }
+    else toast(`种下了 ${x.name}，TA 也能看到`);
+    await loadGarden(); renderAll();
+  };
+}
+function renderCollection() {
+  const got = {}; harvests.forEach((h) => { got[h.result] = (got[h.result] || 0) + 1; });
+  const kinds = Melon.items.filter((x) => got[x.name]).length;
+  const section = (title, kind) => {
+    const list = Melon.items.filter((x) => x.kind === kind);
+    return `<div class="mon">${title}</div><div class="cgrid">${list.map((x) => {
+      const n = got[x.name] || 0, rc = Melon.R[x.r][1];
+      return `<button class="ccard ${n ? "" : "none"}" type="button" data-n="${esc(x.name)}"><div class="art">${Melon.draw(x)}</div>
+        <b>${esc(x.name)}</b><span class="cmeta"><i style="background:${rc}"></i>${n ? "× " + n : "还没收获"}</span></button>`;
+    }).join("")}</div>`;
+  };
+  $("gardenBody").innerHTML = `
+    <div class="wall-stats"><div><b>${harvests.length}</b><span>一共收获</span></div><div><b>${kinds} / ${Melon.items.length}</b><span>收集到的种类</span></div><div><b>${planting ? esc(planting.seed) : "—"}</b><span>正在种</span></div></div>
+    ${section("Melons", "melon")}${section("Dress-up", "dress")}${section("Sweets", "sweet")}
+    <p class="note">点任意一个，去种子袋看它怎么种</p>`;
+  document.querySelectorAll(".ccard").forEach((b) => (b.onclick = () => { gardenPick = b.dataset.n; gardenView = "bag"; renderGarden(); $("scroller").scrollTo(0, 0); }));
+}
+document.querySelectorAll("#p-garden .seg button").forEach((b) => (b.onclick = () => { gardenView = b.dataset.gv; renderGarden(); }));
+$("gBack").onclick = () => document.querySelector('.tab[data-p="p-today"]').click();
+
+/* ---------- goodnight letter: TA's note arrives as an envelope that opens ---------- */
+const SEAL = '<svg class="seal" viewBox="-24 -24 48 48" aria-hidden="true"><circle r="22" fill="#e8394f"/><circle r="22" fill="none" stroke="#ffc2c9" stroke-width="2" stroke-dasharray="3 3"/><g transform="translate(0,-5)"><path d="M-14 0a14 14 0 0 0 28 0z" fill="#68c49a"/><path d="M-12 0a12 12 0 0 0 24 0z" fill="#fff4f1"/><path d="M-10.5 0a10.5 10.5 0 0 0 21 0z" fill="#ff4d63"/><ellipse cx="-4" cy="4" rx="1" ry="1.7" fill="#141012"/><ellipse cx="3" cy="5" rx="1" ry="1.7" fill="#141012"/></g></svg>';
+function openLetter(c) {
+  const el = $("letter");
+  el.innerHTML = `<div class="lt-bg"></div>
+    <div class="env" id="env"><div class="env-back"></div>
+      <div class="paper" id="paper"><span class="to">TO ${esc(me.name || "你")}</span><p>${esc(c.note)}</p><span class="from">${esc(partner?.name || "TA")} · ${hhmm(c.at)}</span></div>
+      <div class="env-front"></div><div class="flap" id="flap"></div>${SEAL}</div>
+    <button class="pill main lt-close" id="ltClose" type="button">收好了</button>`;
+  el.hidden = false;
+  const close = () => {
+    if (reduceMotion()) { el.hidden = true; return; }
+    el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 250 }).onfinish = () => { el.hidden = true; };
+  };
+  $("ltClose").onclick = close;
+  el.querySelector(".lt-bg").onclick = close;
+  $("ltClose").focus({ preventScroll: true });
+  const env = $("env"), flap = $("flap"), paper = $("paper"), seal = el.querySelector(".seal"), front = el.querySelector(".env-front"), back = el.querySelector(".env-back");
+  const opened = () => { flap.style.zIndex = 0; [front, back, flap, seal].forEach((x) => (x.style.opacity = 0)); paper.style.transform = "translateY(-110px) scale(1.04)"; };
+  if (reduceMotion()) return opened();
+  env.animate([{ transform: "translateY(260px) scale(.6) rotate(-8deg)", opacity: 0 }, { transform: "translateY(-10px) scale(1.03) rotate(2deg)", opacity: 1, offset: 0.75 }, { transform: "none", opacity: 1 }], { duration: 650, easing: "cubic-bezier(.2,.8,.3,1)" });
+  $("ltClose").animate([{ opacity: 0 }, { opacity: 0, offset: 0.8 }, { opacity: 1 }], { duration: 2300, fill: "backwards" });
+  setTimeout(() => {
+    seal.animate([{ transform: "scale(1)", opacity: 1 }, { transform: "scale(1.35)", opacity: 0 }], { duration: 300, fill: "forwards" });
+    flap.animate([{ transform: "rotateX(0deg)" }, { transform: "rotateX(180deg)" }], { duration: 450, easing: "ease-in-out", fill: "forwards" }).onfinish = () => {
+      flap.style.zIndex = 0;
+      paper.animate([{ transform: "translateY(0)" }, { transform: "translateY(-110px) scale(1.04)" }], { duration: 650, easing: "cubic-bezier(.2,.8,.3,1)", fill: "forwards" });
+      [front, back, flap].forEach((x) => x.animate([{ opacity: 1 }, { opacity: 0, transform: (x === flap ? "rotateX(180deg) " : "") + "translateY(70px)" }], { duration: 500, delay: 350, fill: "forwards" }));
+    };
+  }, 800);
+}
+// open each new letter by itself once, after any check-in animation has finished
+function maybeLetter(c) {
+  let seen = ""; try { seen = localStorage.getItem("letterSeen") || ""; } catch { /* storage unavailable */ }
+  if (seen === c.id) return;
+  try { localStorage.setItem("letterSeen", c.id); } catch { /* storage unavailable */ }
+  const go = () => (fxBusy || !$("letter").hidden ? setTimeout(go, 400) : openLetter(c));
+  setTimeout(go, 400);
+}
+
 /* ---------- render: settings ---------- */
 function renderSettings() {
   $("s-bed").value = couple.bed_target.slice(0, 5);
@@ -748,6 +1013,7 @@ function renderAll() {
   if (!$("p-stats").hidden) renderStats();
   if (!$("p-set").hidden) renderSettings();
   if (!$("p-diary").hidden) renderDiary();
+  if (!$("p-garden").hidden) renderGarden();
 }
 
 /* ---------- events: auth ---------- */
@@ -960,7 +1226,7 @@ document.addEventListener("gesturechange", (e) => e.preventDefault());
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 setInterval(() => { if (!$("v-main").hidden && me && couple) renderToday(); }, 30000);
 document.addEventListener("visibilitychange", async () => {
-  if (document.visibilityState === "visible" && me?.couple_id) { if (!partner) await refreshPartner(); await loadCheckins(); renderAll(); }
+  if (document.visibilityState === "visible" && me?.couple_id) { if (!partner) await refreshPartner(); await Promise.all([loadCheckins(), loadGarden()]); renderAll(); }
 });
 sb.auth.onAuthStateChange((ev) => {
   if (ev === "PASSWORD_RECOVERY") { recovering = true; show("v-reset"); }

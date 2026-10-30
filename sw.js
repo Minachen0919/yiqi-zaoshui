@@ -1,6 +1,6 @@
 // 一起早睡 · service worker: offline shell + push notifications
-const CACHE = "zaoshui-v15";
-const SHELL = ["./", "index.html", "app.js", "config.js", "manifest.webmanifest", "icons/icon-192.png"];
+const CACHE = "zaoshui-v16";
+const SHELL = ["./", "index.html", "melons.js", "app.js", "config.js", "manifest.webmanifest", "icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -17,6 +17,7 @@
 <style>
 /* Layout: one phone-sized column; night = dark palette, morning = light palette */
 :root{
+  --common:#9fb5a9; --uncommon:#68c49a; --rare:#8fb7ff; --epic:#d59bff; --legend:#ffc94d; --red:#ff4d63;
   /* all Avenir (built into iPhone); Nunito Sans is the closest web fallback; PingFang covers Chinese */
   --display:"Avenir Next","Avenir","Nunito Sans","PingFang SC","Noto Sans SC",system-ui,sans-serif;
   --body:"Avenir Next","Avenir","Nunito Sans","PingFang SC","Noto Sans SC",system-ui,sans-serif;
@@ -159,6 +160,70 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
 #fx svg{overflow:visible}
 #fx .msg{font-weight:900;font-size:24px;text-align:center;opacity:0;padding:0 24px}
 #fx .msg small{display:block;font-size:14px;font-weight:700;opacity:.75;margin-top:6px}
+/* garden: home card, seed bag, collection */
+#gardenCard{display:grid;grid-template-columns:96px minmax(0,1fr);gap:14px;align-items:center}
+.gc-art{background:radial-gradient(90% 80% at 50% 40%,#2c2226,#171113);border-radius:16px;aspect-ratio:1;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.gc-art svg{width:100%;height:auto}
+.gc-info{display:flex;flex-direction:column;gap:6px;min-width:0;align-items:flex-start}
+.gc-info b{font-size:18px;font-weight:900}
+.gc-info b small{font-size:12px;color:var(--muted);font-weight:700}
+.gc-sub{font-size:12px;color:var(--muted);font-weight:600;line-height:1.5}
+.gdots{display:flex;gap:4px;flex-wrap:wrap}
+.gdots i{width:11px;height:11px;border-radius:50%;background:var(--line)}
+.gdots i.on{background:var(--accent)}
+.gc-info .pill{padding:7px 14px;font-size:13px;margin-top:2px}
+.packets{display:flex;gap:10px;overflow-x:auto;padding:12px 2px 10px;scroll-snap-type:x proximity;scrollbar-width:none}
+.packets::-webkit-scrollbar{display:none}
+.packet{flex:none;width:100px;scroll-snap-align:start;border:0;padding:0;background:none;cursor:pointer;font:inherit;color:#fff;position:relative}
+.packet .bag{background:linear-gradient(#f7e9d9,#ecd7c2);border-radius:4px 4px 12px 12px;padding:14px 7px 9px;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;box-shadow:0 6px 14px rgba(0,0,0,.3);transition:transform .2s}
+.packet .bag::before{content:"";position:absolute;left:0;right:0;top:-6px;height:8px;background:#f7e9d9;clip-path:polygon(0 100%,5% 0,10% 100%,15% 0,20% 100%,25% 0,30% 100%,35% 0,40% 100%,45% 0,50% 100%,55% 0,60% 100%,65% 0,70% 100%,75% 0,80% 100%,85% 0,90% 100%,95% 0,100% 100%)}
+.packet .win{width:100%;aspect-ratio:6/5;border-radius:10px;background:radial-gradient(90% 80% at 50% 40%,#2c2226,#171113);overflow:hidden}
+.packet .win svg{width:100%;height:100%}
+.packet .pn{font-size:11.5px;font-weight:900;color:#2a1d22;text-align:center;line-height:1.2;min-height:2.4em;display:flex;align-items:center}
+.packet .pd{font-size:10px;font-weight:800;color:#7a5f66}
+.packet .rb{position:absolute;top:20px;right:11px;width:8px;height:8px;border-radius:50%}
+.packet .growing{position:absolute;left:50%;top:-14px;transform:translateX(-50%);font-size:10px;font-weight:900;background:var(--accent);color:#fff;border-radius:99px;padding:1px 8px;white-space:nowrap}
+.packet[aria-selected="true"] .bag{transform:translateY(-6px);box-shadow:0 0 0 3px var(--accent),0 10px 20px rgba(0,0,0,.35)}
+.packet:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:12px}
+.pick{display:grid;grid-template-columns:120px minmax(0,1fr);gap:14px;align-items:center;background:var(--surface);border-radius:20px;padding:14px}
+.pick .art{border-radius:14px;background:radial-gradient(90% 80% at 50% 40%,#33282c,#171113);aspect-ratio:6/5;overflow:hidden}
+.pick .art svg{width:100%;height:100%}
+.pick .info{display:flex;flex-direction:column;gap:8px;min-width:0;align-items:flex-start}
+.pick h3{margin:0;font-size:19px;font-weight:900;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.kvs{display:flex;gap:8px;flex-wrap:wrap;width:100%}
+.kv{background:var(--bg);border-radius:12px;padding:7px 10px;font-size:11px;color:var(--muted);font-weight:700;flex:1;min-width:110px}
+.kv b{display:block;color:var(--fg);font-size:13px;font-weight:800;margin-top:2px}
+.cgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:6px}
+.ccard{border:0;font:inherit;color:var(--fg);background:var(--surface);border-radius:16px;padding:8px;display:flex;flex-direction:column;gap:4px;cursor:pointer;text-align:left;min-width:0;box-shadow:inset 0 0 0 1px var(--line)}
+.ccard .art{border-radius:12px;background:radial-gradient(90% 80% at 50% 40%,#2c2226,#171113);aspect-ratio:6/5;overflow:hidden}
+.ccard .art svg{width:100%;height:100%}
+.ccard b{font-size:12px;font-weight:900;line-height:1.25;overflow-wrap:anywhere}
+.cmeta{font-size:11px;font-weight:800;color:var(--muted);display:flex;align-items:center;gap:5px}
+.cmeta i{width:7px;height:7px;border-radius:50%}
+.ccard.none .art{opacity:.45}
+.ccard.none b{color:var(--muted)}
+/* harvest animation */
+.hv{position:relative;width:240px;height:200px;display:flex;align-items:center;justify-content:center}
+.hv-rays{position:absolute;left:50%;top:50%;width:360px;height:360px;margin:-180px 0 0 -180px;border-radius:50%;background:repeating-conic-gradient(rgba(255,201,77,.22) 0 10deg,transparent 10deg 30deg);-webkit-mask:radial-gradient(circle,#000 25%,transparent 68%);mask:radial-gradient(circle,#000 25%,transparent 68%)}
+.hv-art{width:230px;position:relative}
+.hv-art svg{width:100%;height:auto;display:block}
+/* goodnight letter */
+.goodnight.letter{cursor:pointer}
+.goodnight.letter::after{content:"拆信 ›";margin-left:auto;flex:none;font-size:12px;font-weight:900;color:var(--accent)}
+#letter{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:28px;padding:0 16px}
+#letter[hidden]{display:none!important}
+.lt-bg{position:absolute;inset:0;background:rgba(14,11,12,.88);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.env{position:relative;width:min(300px,86vw);height:190px;perspective:900px;margin-top:90px}
+.env-back{position:absolute;inset:0;border-radius:14px;background:#ffc9d1}
+.paper{position:absolute;left:12px;right:12px;bottom:10px;min-height:170px;z-index:1;background:#fff8f2;border-radius:10px;padding:16px 18px 14px;color:#2a1d22;box-shadow:0 8px 22px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:6px;
+  background-image:repeating-linear-gradient(to bottom,transparent 0 29px,rgba(255,77,99,.15) 29px 30px);background-position:0 40px}
+.paper .to{font-size:11px;font-weight:900;color:#e8394f;letter-spacing:.08em}
+.paper p{margin:0;font-size:19px;font-weight:800;line-height:30px;overflow-wrap:anywhere;white-space:pre-wrap;color:#2a1d22}
+.paper .from{align-self:flex-end;font-size:12px;font-weight:800;color:#9a8288;margin-top:auto}
+.env-front{position:absolute;inset:0;z-index:2;border-radius:14px;background:linear-gradient(#ffb3bf,#ff9fb0);clip-path:polygon(0 30%,50% 66%,100% 30%,100% 100%,0 100%)}
+.flap{position:absolute;left:0;right:0;top:0;height:62%;z-index:3;background:#ff8fa3;clip-path:polygon(0 0,100% 0,50% 100%);transform-origin:50% 0;border-radius:14px 14px 0 0;backface-visibility:visible}
+.env .seal{position:absolute;left:50%;top:62%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:4}
+.lt-close{position:relative;z-index:1}
 /* diary: tear-off desk calendar + wall of every goodnight */
 .dhead{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .dhead h2{font-size:22px}
@@ -378,6 +443,8 @@ html.fitfix .tabs{bottom:auto;top:calc(var(--app-h) - var(--tabs-h,0px))}
         <div class="photos" id="photos"></div>
       </div>
 
+      <div class="card" id="gardenCard" hidden></div>
+
       <div class="card">
         <div class="bethead">
           <div><div class="label">本周赌注 · 周日结算</div><div class="stake" id="stake"></div></div>
@@ -450,6 +517,14 @@ html.fitfix .tabs{bottom:auto;top:calc(var(--app-h) - var(--tabs-h,0px))}
       <div id="diaryBody" style="display:flex;flex-direction:column;gap:14px"></div>
     </section>
 
+    <section id="p-garden" class="page" hidden>
+      <div class="dhead">
+        <div style="display:flex;gap:8px;align-items:center"><button class="iconbtn" id="gBack" type="button" aria-label="返回">‹</button><h2>Melons</h2></div>
+        <div class="seg" role="group" aria-label="西瓜"><button type="button" data-gv="bag" aria-pressed="true">Seed Bag</button><button type="button" data-gv="collection" aria-pressed="false">Collection</button></div>
+      </div>
+      <div id="gardenBody" style="display:flex;flex-direction:column;gap:14px"></div>
+    </section>
+
     <section id="p-set" class="page" hidden style="flex-direction:column;gap:16px">
       <div class="card">
         <h2>我们的约定</h2>
@@ -493,9 +568,11 @@ html.fitfix .tabs{bottom:auto;top:calc(var(--app-h) - var(--tabs-h,0px))}
 </nav>
 <div class="toast" id="toast" hidden></div>
 <div id="fx" aria-live="polite"></div>
+<div id="letter" role="dialog" aria-modal="true" aria-label="晚安信" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
+<script src="melons.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
