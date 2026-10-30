@@ -1,6 +1,6 @@
 /* 一起早睡 · app logic */
 const sb = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
 });
 const $ = (id) => document.getElementById(id);
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai";
@@ -27,7 +27,7 @@ document.documentElement.classList.toggle("am", !isNightPhase());
 /* ---------- ui helpers ---------- */
 function toast(t) { const e = $("toast"); e.textContent = t; e.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (e.hidden = true), 2200); }
 function show(view) {
-  for (const v of ["v-boot", "v-auth", "v-pair", "v-main"]) $(v).hidden = v !== view;
+  for (const v of ["v-boot", "v-auth", "v-reset", "v-pair", "v-main"]) $(v).hidden = v !== view;
   $("tabs").hidden = view !== "v-main";
 }
 function setChip(el, cls, txt) { el.className = "chip " + cls; el.textContent = txt; }
@@ -418,6 +418,7 @@ function renderSettings() {
   $("s-partner").checked = me.notify_partner;
   if (document.activeElement !== $("s-name")) $("s-name").value = me.name || "";
   $("s-code").textContent = couple.code;
+  sb.auth.getUser().then(({ data }) => { $("s-email").textContent = data?.user?.email || ""; });
   renderPushState();
 }
 const standalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
@@ -451,6 +452,32 @@ $("a-switch").onclick = () => {
   $("a-switch").textContent = signup ? "已有账号？登录" : "还没有账号？注册";
   $("a-pass").autocomplete = signup ? "new-password" : "current-password";
   $("a-err").textContent = "";
+  $("a-forgot").hidden = signup;
+};
+$("a-forgot").onclick = async () => {
+  const email = $("a-email").value.trim();
+  if (!email) return ($("a-err").textContent = "先在上面填你注册时用的邮箱");
+  $("a-forgot").disabled = true;
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  $("a-forgot").disabled = false;
+  $("a-err").textContent = error
+    ? (/rate|seconds/i.test(error.message) ? "发得太频繁了，过一会儿再试" : "发送失败：" + error.message)
+    : "重置链接已发到这个邮箱（也看看垃圾邮件），点开后设置新密码";
+};
+let recovering = /type=recovery/.test(location.hash);
+$("v-reset").onsubmit = async (e) => {
+  e.preventDefault();
+  const a = $("r-pass").value, b = $("r-pass2").value;
+  if (a.length < 6) return ($("r-err").textContent = "密码至少 6 位");
+  if (a !== b) return ($("r-err").textContent = "两次输入的不一样");
+  $("r-go").disabled = true;
+  const { error } = await sb.auth.updateUser({ password: a });
+  $("r-go").disabled = false;
+  if (error) return ($("r-err").textContent = /session|expired|token/i.test(error.message) ? "链接已过期，请回到登录页重新点「忘记密码」" : "保存失败：" + error.message);
+  recovering = false;
+  history.replaceState(null, "", location.pathname);
+  toast("新密码已保存");
+  loadAll();
 };
 $("v-auth").onsubmit = async (e) => {
   e.preventDefault();
@@ -609,5 +636,8 @@ setInterval(() => { if (!$("v-main").hidden) renderToday(); }, 30000);
 document.addEventListener("visibilitychange", async () => {
   if (document.visibilityState === "visible" && me?.couple_id) { if (!partner) await refreshPartner(); await loadCheckins(); renderAll(); }
 });
-sb.auth.onAuthStateChange((ev) => { if (ev === "SIGNED_OUT") show("v-auth"); });
-loadAll().catch(() => { show("v-auth"); });
+sb.auth.onAuthStateChange((ev) => {
+  if (ev === "PASSWORD_RECOVERY") { recovering = true; show("v-reset"); }
+  else if (ev === "SIGNED_OUT") show("v-auth");
+});
+if (recovering) show("v-reset"); else loadAll().catch(() => { show("v-auth"); });

@@ -204,6 +204,18 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
       <p class="err" id="a-err"></p>
       <button class="big" id="a-go" type="submit">登录</button>
       <button class="ghost" id="a-switch" type="button">还没有账号？注册</button>
+      <button class="ghost" id="a-forgot" type="button">忘记密码？</button>
+    </div>
+  </form>
+
+  <!-- set a new password after opening the reset link from email -->
+  <form id="v-reset" class="center" hidden novalidate>
+    <div class="brand"><h1>设置新密码</h1><p class="muted" style="margin:0">设好之后，用新密码在主屏幕的 App 里登录</p></div>
+    <div class="stack">
+      <input class="field" id="r-pass" type="password" placeholder="新密码（至少 6 位）" autocomplete="new-password">
+      <input class="field" id="r-pass2" type="password" placeholder="再输一遍" autocomplete="new-password">
+      <p class="err" id="r-err"></p>
+      <button class="big" id="r-go" type="submit">保存新密码</button>
     </div>
   </form>
 
@@ -392,7 +404,7 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
         <div>
           <div class="set"><label for="s-name">昵称</label><input id="s-name" type="text" maxlength="12"></div>
           <div class="set"><div class="lab">配对码</div><span class="num" id="s-code"></span></div>
-          <div class="set"><div class="lab">账号</div><button class="ghost sm" id="s-out">退出登录</button></div>
+          <div class="set"><div class="lab">账号<small id="s-email"></small></div><button class="ghost sm" id="s-out">退出登录</button></div>
         </div>
       </div>
     </section>
