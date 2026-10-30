@@ -937,7 +937,7 @@ $("installX").onclick = () => { $("installTip").hidden = true; try { localStorag
 
 /* ---------- boot ---------- */
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
-setInterval(() => { if (!$("v-main").hidden) renderToday(); }, 30000);
+setInterval(() => { if (!$("v-main").hidden && me && couple) renderToday(); }, 30000);
 document.addEventListener("visibilitychange", async () => {
   if (document.visibilityState === "visible" && me?.couple_id) { if (!partner) await refreshPartner(); await loadCheckins(); renderAll(); }
 });
