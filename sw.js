@@ -1,5 +1,5 @@
 // 一起早睡 · service worker: offline shell + push notifications
-const CACHE = "zaoshui-v13";
+const CACHE = "zaoshui-v14";
 const SHELL = ["./", "index.html", "app.js", "config.js", "manifest.webmanifest", "icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {

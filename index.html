@@ -2,7 +2,7 @@
 <html lang="zh-CN" class="pm">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>一起早睡</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -31,11 +31,13 @@
   --dawn:#ffd6d0; --dawn2:#fff4f1; --accent:#ff4d63; --accent-fg:#ffffff;
   --ok:#2f9e6f; --warn:#c97f12; --bad:#d6455a; --miss:#f0e0de; --me:#ff4d63; --ta:#d9788a; --skyfg:#141012; --rind:#5dbb8f; --cream:#fff4f1; --seed:#141012; color-scheme:light}
 *{box-sizing:border-box}
-html,body{margin:0;min-height:100%}
-html{padding:env(safe-area-inset-top,0px) 0 0}
+/* the page itself never scrolls or zooms; only #scroller scrolls, so the tab bar can't drift with iOS rubber-banding */
+html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none}
+body{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+#scroller{position:fixed;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;padding-top:env(safe-area-inset-top,0px)}
 body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;font-weight:500;line-height:1.55;-webkit-tap-highlight-color:transparent;transition:background .5s,color .5s}
 [hidden]{display:none!important}
-.app{max-width:440px;margin:0 auto;padding:16px 16px 110px;display:flex;flex-direction:column;gap:16px}
+.app{max-width:440px;margin:0 auto;padding:16px 16px calc(110px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:16px}
 h1,h2,h3{font-family:var(--display);font-weight:800;margin:0;text-wrap:balance;letter-spacing:0}
 .num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700}
 .muted{color:var(--muted)}
@@ -74,7 +76,7 @@ h1,h2,h3{font-family:var(--display);font-weight:800;margin:0;text-wrap:balance;l
 .big:active{transform:scale(.98)}
 .big:disabled{background:var(--line);color:var(--muted);cursor:default}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.field{font:inherit;width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.field{font:inherit;font-size:16px;width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 textarea.field{resize:none;min-height:44px}
 .goodnight{border:1px dashed var(--line);border-radius:16px;padding:12px;font-size:14px;display:flex;gap:10px;align-items:center}
 .goodnight.unlocked{border-style:solid;border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
@@ -224,7 +226,7 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
 .set:last-child{border-bottom:0}
 .set label,.set .lab{min-width:0}
 .set small{display:block;color:var(--muted);font-size:12px}
-.set input[type=time],.set select,.set input[type=text]{font:inherit;font-family:var(--mono);background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:6px 8px;max-width:150px}
+.set input[type=time],.set select,.set input[type=text]{font:inherit;font-size:16px;font-family:var(--mono);background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:6px 8px;max-width:150px}
 .switch{appearance:none;-webkit-appearance:none;width:44px;height:26px;border-radius:999px;background:var(--line);position:relative;cursor:pointer;flex:none;transition:background .2s;margin:0}
 .switch::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .2s}
 .switch:checked{background:var(--accent)}
@@ -239,7 +241,7 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
 .code{font-family:var(--mono);font-size:36px;font-weight:800;letter-spacing:.2em;text-align:center}
 .banner{border-radius:16px;padding:12px 14px;font-size:13px;background:color-mix(in srgb,var(--accent) 12%,transparent);display:flex;gap:10px;justify-content:space-between;align-items:center}
 /* tabs */
-.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:8px 16px calc(8px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;z-index:5;transition:background .5s}
+.tabs{position:fixed;left:0;right:0;bottom:0;transform:translateZ(0);background:var(--surface);border-top:1px solid var(--line);padding:8px 16px calc(8px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;z-index:5;transition:background .5s}
 .tabs .in{display:grid;grid-template-columns:repeat(5,1fr);width:100%;max-width:440px}
 .tab{font:inherit;font-size:12px;background:none;border:0;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px;cursor:pointer;border-radius:10px}
 .tab svg{width:24px;height:24px}
@@ -254,6 +256,7 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
 </style>
 </head>
 <body>
+<div id="scroller">
 <div class="app">
 
   <!-- loading -->
@@ -474,6 +477,7 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
       </div>
     </section>
   </div>
+</div>
 </div>
 
 <nav class="tabs" role="tablist" id="tabs" hidden>

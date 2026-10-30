@@ -917,7 +917,7 @@ document.querySelectorAll(".tab").forEach((t) => (t.onclick = async () => {
   document.querySelectorAll(".page").forEach((p) => { p.hidden = p.id !== t.dataset.p; });
   if (t.dataset.p !== "p-today" && !partner) await refreshPartner();
   renderAll();
-  window.scrollTo(0, 0);
+  $("scroller").scrollTo(0, 0);
 }));
 const goMonth = async (n) => {
   calMonth.setMonth(calMonth.getMonth() + n);
@@ -936,6 +936,9 @@ try {
 $("installX").onclick = () => { $("installTip").hidden = true; try { localStorage.setItem("installTipX", "1"); } catch {} };
 
 /* ---------- boot ---------- */
+// block pinch-zoom (double-tap zoom is already off via touch-action: manipulation)
+document.addEventListener("gesturestart", (e) => e.preventDefault());
+document.addEventListener("gesturechange", (e) => e.preventDefault());
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 setInterval(() => { if (!$("v-main").hidden && me && couple) renderToday(); }, 30000);
 document.addEventListener("visibilitychange", async () => {
