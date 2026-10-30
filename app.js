@@ -268,11 +268,14 @@ function fx(fn) { fxQueue.push(fn); if (!fxBusy) fxNext(); }
 function fxNext() {
   const fn = fxQueue.shift();
   const st = $("fx");
-  if (!fn) { fxBusy = false; st.style.opacity = 0; st.innerHTML = ""; st.style.background = "none"; return; }
+  // finished animations with fill:"forwards" keep overriding styles, so clear them between plays
+  const reset = () => { st.getAnimations().forEach((a) => a.cancel()); st.style.opacity = 0; st.innerHTML = ""; st.style.background = "none"; };
+  if (!fn) { fxBusy = false; reset(); return; }
+  reset();
   fxBusy = true;
   const ms = fn(st);
   setTimeout(() => {
-    const out = () => { st.style.opacity = 0; st.innerHTML = ""; st.style.background = "none"; fxNext(); };
+    const out = () => fxNext();
     if (reduceMotion()) return out();
     st.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 450, fill: "forwards" }).onfinish = out;
   }, ms);
