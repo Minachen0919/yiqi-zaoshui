@@ -475,59 +475,228 @@ function renderStats() {
     `最近 7 晚你们有 ${both} 晚一起达标` + (both > prev ? `，比之前一周多 ${both - prev} 晚。` : both < prev ? `，比之前一周少 ${prev - both} 晚。` : "，和之前一周一样。");
 }
 
-/* ---------- render: diary ---------- */
-let diaryRows = [], diaryShown = 30, diaryBusy = false;
+/* ---------- render: diary (tear-off desk calendar + wall of every goodnight) ---------- */
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-async function renderDiary(refetch = true) {
-  if (refetch && !diaryBusy) {
-    diaryBusy = true;
-    const { data } = await sb.from("checkins").select("user_id,night,at,note")
-      .eq("couple_id", me.couple_id).eq("kind", "sleep").not("note", "is", null)
-      .order("night", { ascending: false }).limit(5000);
-    diaryRows = data || [];
-    diaryBusy = false;
-  }
-  const today = nightOf();
-  const mineTonight = rec(me.id, today);
-  const unlockedTonight = !!(mineTonight.sleep || mineTonight.leave);
-  const q = $("diaryQ").value.trim().toLowerCase();
+let diaryView = "desk", diaryCur = null, diaryWho = "all", diaryQ = "", diaryDrag = null, diaryBusy = false;
+let diarySound = true;
+try { diarySound = localStorage.getItem("diarySound") !== "0"; } catch { /* storage unavailable */ }
+const SPEAKER_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
+const SPEAKER_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>';
 
-  // group notes by night, newest first
-  const byNight = new Map();
-  for (const r of diaryRows) {
-    if (!byNight.has(r.night)) byNight.set(r.night, []);
-    byNight.get(r.night).push(r);
-  }
-  let nights = [...byNight.keys()];
-  if (q) nights = nights.filter((k) => byNight.get(k).some((r) => r.note.toLowerCase().includes(q) && !(k === today && r.user_id !== me.id && !unlockedTonight)));
-
-  const total = byNight.size;
-  $("diaryCount").textContent = total ? `已经记下 ${total} 个晚上的晚安话` : "每晚的晚安话都会收进这里";
-  $("diaryEmpty").hidden = total > 0;
-  $("diaryEmpty").textContent = "还没有晚安话。睡前打卡时写一句，就会出现在这里";
-  if (q && total && !nights.length) { $("diaryEmpty").hidden = false; $("diaryEmpty").textContent = "没有找到包含这句话的日记"; }
-
-  const people = [me, partner].filter(Boolean);
-  const week = "日一二三四五六";
-  $("diary").innerHTML = nights.slice(0, diaryShown).map((k) => {
-    const d = new Date(k + "T12:00:00");
-    const rows = byNight.get(k);
-    const lines = people.map((p) => {
-      const r = rows.find((x) => x.user_id === p.id);
-      const color = p.id === me.id ? "var(--me)" : "var(--ta)";
-      const head = `<span class="dot" style="background:${color}"></span><div style="min-width:0"><div class="who2">${esc(whoName(p.id))}${r ? " · " + hhmm(r.at) : ""}</div>`;
-      if (!r) return `<div class="line empty">${head}<p>${k === today ? "还没写" : "这晚没写"}</p></div></div>`;
-      if (k === today && p.id !== me.id && !unlockedTonight) return `<div class="line locked">${head}<p>你也打卡后就能看到</p></div></div>`;
-      let text = esc(r.note);
-      if (q) text = text.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), (m) => `<mark>${m}</mark>`);
-      return `<div class="line">${head}<p>${text}</p></div></div>`;
-    }).join("");
-    return `<article class="entry"><div class="eh"><span class="ed">${d.getFullYear() !== new Date().getFullYear() ? d.getFullYear() + " 年 " : ""}${d.getMonth() + 1} 月 ${d.getDate()} 日</span><span class="ew">周${week[d.getDay()]}${k === today ? " · 今晚" : ""}</span></div>${lines}</article>`;
-  }).join("");
-  $("diaryMore").hidden = nights.length <= diaryShown;
+// load every check-in for the couple once per visit, so old nights have their full record
+async function loadDiary() {
+  const { data } = await sb.from("checkins").select("*").eq("couple_id", me.couple_id).order("night", { ascending: false }).limit(5000);
+  const seen = new Set(checkins.map((c) => c.id));
+  (data || []).forEach((c) => { if (!seen.has(c.id)) checkins.push(c); });
 }
-$("diaryQ").oninput = () => { diaryShown = 30; renderDiary(false); };
-$("diaryMore").onclick = () => { diaryShown += 30; renderDiary(false); };
+// every night that has any record, plus tonight; newest first
+function diaryNights() {
+  const today = nightOf();
+  const set = new Set(checkins.map((c) => c.night)); set.add(today);
+  return [...set].filter((k) => k <= today).sort().reverse();
+}
+const tonightUnlocked = () => { const r = rec(me.id, nightOf()); return !!(r.sleep || r.leave); };
+const bothOk = (k) => !!partner && status(me.id, k) === "ok" && status(partner.id, k) === "ok";
+
+async function renderDiary(refetch = true) {
+  if (diaryDrag) return; // never rebuild the page under a finger
+  $("dSound").innerHTML = diarySound ? SPEAKER_ON : SPEAKER_OFF;
+  document.querySelectorAll("#p-diary .seg button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.dv === diaryView));
+  if (refetch && !diaryBusy) { diaryBusy = true; try { await loadDiary(); } finally { diaryBusy = false; } }
+  if (diaryDrag) return;
+  diaryView === "desk" ? renderDesk() : renderWall();
+}
+
+/* --- desk calendar --- */
+let audioCtx = null;
+function ripSound() {
+  if (!diarySound) return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const len = 0.32, buf = audioCtx.createBuffer(1, audioCtx.sampleRate * len, audioCtx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) { const t = i / d.length; d[i] = (Math.random() * 2 - 1) * (Math.random() < 0.08 ? 1 : 0.35) * Math.pow(1 - t, 1.6); }
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const bp = audioCtx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 2600; bp.Q.value = 0.8;
+    const g = audioCtx.createGain(); g.gain.value = 0.35;
+    src.connect(bp).connect(g).connect(audioCtx.destination); src.start();
+  } catch { /* audio unavailable */ }
+}
+function seedSvg(n, seed) {
+  let s = "", r = seed;
+  const rnd = () => { r = (r * 9301 + 49297) % 233280; return r / 233280; };
+  for (let i = 0; i < n; i++) s += `<ellipse cx="${(6 + rnd() * 88).toFixed(1)}%" cy="${(6 + rnd() * 88).toFixed(1)}%" rx="3" ry="5.5" fill="#141012" opacity=".5"/>`;
+  return `<svg class="seedbg" aria-hidden="true">${s}</svg>`;
+}
+function sheetHTML(k, cls, tally) {
+  const today = nightOf(), d = new Date(k + "T12:00:00");
+  const mine = rec(me.id, k), theirs = partner ? rec(partner.id, k) : {};
+  const ok = bothOk(k), isToday = k === today;
+  const line = (r, uid) => {
+    const name = esc(whoName(uid));
+    if (r.leave) return `<div class="msg"><small>${name} · 请假</small>${esc(r.leave.note || "这晚请假了")}</div>`;
+    if (r.sleep && r.sleep.note) {
+      if (isToday && uid !== me.id && !tonightUnlocked()) return `<div class="msg none">${name} 已经写好了，你也打卡后就能看到</div>`;
+      return `<div class="msg"><small>${name} · ${hhmm(r.sleep.at)}</small>${esc(r.sleep.note)}</div>`;
+    }
+    if (r.sleep) return `<div class="msg none">${name} ${hhmm(r.sleep.at)} 睡了，没写晚安话</div>`;
+    return `<div class="msg none">${name} ${isToday ? "还没写" : "这晚没写"}</div>`;
+  };
+  const photo = checkins.find((c) => c.night === k && c.kind === "wake" && c.photo_path);
+  const badge = ok ? "两人都早睡了" : isToday ? "今晚进行中" : "这晚没有一起达标";
+  return `<article class="sheet ${ok || isToday ? "" : "miss"} ${cls}" data-k="${k}" aria-label="${d.getMonth() + 1} 月 ${d.getDate()} 日的晚安">
+    <div class="flesh">${ok ? seedSvg(14, d.getDate() * 7 + d.getMonth()) : ""}
+      <div class="date"><div class="d">${d.getDate()}</div><div class="w">${d.getMonth() + 1} 月<small>周${"日一二三四五六"[d.getDay()]}${isToday ? " · 今晚" : ""}</small></div></div>
+      ${partner ? line(theirs, partner.id) : ""}
+      ${line(mine, me.id)}
+      <div class="foot"><span class="badge">${badge}</span><span>${ok ? "🍉 × " + tally : ""}</span></div>
+    </div>${photo ? `<img class="photo" alt="早安照片" data-path="${esc(photo.photo_path)}">` : ""}<div class="curl"></div>
+  </article>`;
+}
+function renderDesk() {
+  const nights = diaryNights();
+  if (!diaryCur || !nights.includes(diaryCur)) diaryCur = nights[0];
+  const i = nights.indexOf(diaryCur);
+  const older = nights[i + 1] || null, newer = i > 0 ? nights[i - 1] : null;
+  // running count of nights you both made it, up to each page
+  const tally = (k) => nights.filter((x) => x <= k && bothOk(x)).length;
+  const stack = nights.slice(i, i + 3).reverse();
+  $("diaryBody").innerHTML = `
+    <div class="desk" id="desk">
+      <div class="binding"><span class="ring" style="left:26%"></span><span class="ring" style="right:26%"></span></div>
+      <div class="stub" id="stub" style="opacity:${newer ? 1 : 0}"></div>
+      ${stack.map((k, j) => sheetHTML(k, j === stack.length - 1 ? "top" : j === stack.length - 2 ? "under1" : "under2", tally(k))).join("")}
+    </div>
+    <div class="deskbar"><button class="pill" id="dBack" type="button" ${newer ? "" : "disabled"}>‹ 贴回去</button><button class="pill main" id="dTear" type="button" ${older ? "" : "disabled"}>撕一页</button></div>
+    <p class="note">${older ? "按住页面往左下或右下拖，拖过一半松手就撕下来了" : "这是第一页，你们开始用的那天"}</p>`;
+  $("dTear").onclick = autoTear;
+  $("dBack").onclick = putBack;
+  const imgs = [...document.querySelectorAll("#desk .photo")];
+  if (imgs.length) signed(imgs.map((im) => im.dataset.path)).then((urls) => imgs.forEach((im, j) => { if (urls[j]) im.src = urls[j]; }));
+  if (older) bindSheetDrag(document.querySelector(".sheet.top"));
+}
+const tearProgress = (dx, dy) => Math.min(1, Math.hypot(dx, Math.max(0, dy) * 0.7) / 180);
+function sheetTransform(dx, dy) {
+  // the sheet hinges on the top corner opposite the pull, like paper peeling off a perforation
+  const dir = dx < 0 ? -1 : 1, p = tearProgress(dx, dy);
+  const ang = Math.max(-55, Math.min(55, dx * 0.16 + dir * Math.max(0, dy) * 0.05));
+  return { origin: dir < 0 ? "100% 0" : "0% 0", t: `translate(${dx * 0.12}px,${Math.max(0, dy) * 0.35}px) rotate(${ang}deg) skewY(${dir * p * -6}deg)`, p, dir };
+}
+function dragTo(el, dx, dy) {
+  const f = sheetTransform(dx, dy);
+  el.style.transformOrigin = f.origin; el.style.transform = f.t;
+  const curl = el.querySelector(".curl");
+  curl.style.opacity = Math.min(1, f.p * 1.4);
+  curl.style.background = `linear-gradient(${f.dir < 0 ? "225deg" : "135deg"},transparent ${70 - f.p * 40}%,rgba(255,255,255,.25) ${72 - f.p * 40}%,rgba(0,0,0,.35) ${80 - f.p * 30}%,transparent 100%)`;
+  if (f.p > 0.5 && diaryDrag && !diaryDrag.ripped) { diaryDrag.ripped = true; ripSound(); $("stub").style.opacity = 1; if (navigator.vibrate) navigator.vibrate(12); }
+  const under = document.querySelector(".sheet.under1");
+  if (under) { under.style.transition = "none"; under.style.transform = `translateY(${6 - 6 * f.p}px) scale(${0.975 + 0.025 * f.p})`; under.style.filter = `brightness(${0.8 + 0.2 * f.p})`; }
+}
+function bindSheetDrag(top) {
+  top.addEventListener("pointerdown", (e) => {
+    top.setPointerCapture(e.pointerId);
+    diaryDrag = { x: e.clientX, y: e.clientY, dx: 0, dy: 0, vx: 0, ripped: false, lx: e.clientX, lt: performance.now() };
+  });
+  top.addEventListener("pointermove", (e) => {
+    if (!diaryDrag) return;
+    const now = performance.now();
+    diaryDrag.vx = (e.clientX - diaryDrag.lx) / Math.max(1, now - diaryDrag.lt); diaryDrag.lx = e.clientX; diaryDrag.lt = now;
+    diaryDrag.dx = e.clientX - diaryDrag.x; diaryDrag.dy = e.clientY - diaryDrag.y;
+    dragTo(top, diaryDrag.dx, diaryDrag.dy);
+  });
+  const end = () => {
+    if (!diaryDrag) return;
+    const { dx, dy, vx, ripped } = diaryDrag;
+    if (tearProgress(dx, dy) > 0.5 || (Math.abs(vx) > 0.9 && Math.abs(dx) > 40)) flyAway(top, dx, dy, ripped);
+    else springBack(top, dx, dy);
+  };
+  top.addEventListener("pointerup", end);
+  top.addEventListener("pointercancel", end);
+}
+function springBack(el, dx, dy) {
+  const f = sheetTransform(dx, dy);
+  el.style.transform = ""; el.querySelector(".curl").style.opacity = 0;
+  const under = document.querySelector(".sheet.under1"); if (under) { under.style.transform = ""; under.style.filter = ""; }
+  const finish = () => { diaryDrag = null; renderDesk(); };
+  if (reduceMotion() || (Math.abs(dx) < 4 && Math.abs(dy) < 4)) return finish();
+  el.animate([{ transform: f.t, transformOrigin: f.origin }, { transform: `rotate(${f.dir * -2}deg)`, transformOrigin: f.origin, offset: 0.7 }, { transform: "none", transformOrigin: f.origin }],
+    { duration: 420, easing: "cubic-bezier(.3,1.4,.5,1)" }).onfinish = finish;
+}
+function flyAway(el, dx, dy, ripped) {
+  if (!ripped) { ripSound(); $("stub").style.opacity = 1; }
+  const nights = diaryNights(), older = nights[nights.indexOf(diaryCur) + 1];
+  const finish = () => { diaryDrag = null; diaryCur = older; renderDesk(); };
+  if (reduceMotion()) return finish();
+  const f = sheetTransform(dx, dy);
+  el.animate([{ transform: f.t, transformOrigin: f.origin, opacity: 1 }, { transform: `translate(${f.dir * 260}px,560px) rotate(${f.dir * 75}deg)`, transformOrigin: f.origin, opacity: 0.2 }],
+    { duration: 520, easing: "cubic-bezier(.4,0,.8,.4)", fill: "forwards" }).onfinish = finish;
+  const under = document.querySelector(".sheet.under1");
+  if (under) { under.style.transition = "transform .35s, filter .35s"; under.style.transform = "none"; under.style.filter = "none"; }
+}
+function autoTear() {
+  const top = document.querySelector(".sheet.top"), btn = $("dTear");
+  if (!top || btn.disabled) return;
+  btn.disabled = true;
+  if (reduceMotion()) { diaryDrag = { ripped: false }; return flyAway(top, -110, 140, false); }
+  // a scripted pull: lift the bottom-left corner, cross the tear point, then let go
+  const path = [[0, 0], [-30, 40], [-70, 90], [-110, 140]];
+  let i = 0; diaryDrag = { ripped: false };
+  const step = () => { if (i < path.length) { dragTo(top, ...path[i]); i++; setTimeout(step, 70); } else flyAway(top, -110, 140, diaryDrag.ripped); };
+  step();
+}
+function putBack() {
+  const nights = diaryNights(), i = nights.indexOf(diaryCur);
+  if (i <= 0) return;
+  diaryCur = nights[i - 1]; renderDesk();
+  if (reduceMotion()) return;
+  document.querySelector(".sheet.top").animate([{ transform: "translate(-140px,-360px) rotate(-35deg)", opacity: 0, transformOrigin: "0 0" }, { transform: "rotate(3deg)", opacity: 1, offset: 0.75, transformOrigin: "0 0" }, { transform: "none", transformOrigin: "0 0" }],
+    { duration: 520, easing: "cubic-bezier(.2,.8,.3,1.2)" });
+}
+
+/* --- wall of every goodnight --- */
+function renderWall() {
+  const today = nightOf(), locked = !tonightUnlocked();
+  const all = checkins.filter((c) => c.kind === "sleep" && c.note && !(c.night === today && c.user_id !== me.id && locked))
+    .sort((a, b) => b.at.localeCompare(a.at));
+  const freq = {}; all.forEach((c) => { const t = c.note.trim(); freq[t] = (freq[t] || 0) + 1; });
+  const fav = Object.entries(freq).sort((a, b) => b[1] - a[1])[0];
+  const nightsWritten = new Set(all.map((c) => c.night)).size;
+  const qq = diaryQ.toLowerCase();
+  const list = all.filter((c) => (diaryWho === "all" || (diaryWho === "me") === (c.user_id === me.id)) && (!qq || c.note.toLowerCase().includes(qq)));
+  const hl = (s) => { const e = esc(s); if (!qq) return e; const re = new RegExp(esc(diaryQ).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"); return e.replace(re, (m) => `<mark>${m}</mark>`); };
+  // group by month, then within a month drop each card into the shorter column so it still reads top-down in time
+  const months = new Map();
+  list.forEach((c) => { const m = c.night.slice(0, 7); if (!months.has(m)) months.set(m, []); months.get(m).push(c); });
+  let wall = "";
+  months.forEach((items, m) => {
+    const cols = [[], []], h = [0, 0];
+    items.forEach((c) => {
+      const len = c.note.length, size = len <= 4 ? "short" : len > 14 ? "long" : "";
+      const d = new Date(c.night + "T12:00:00"), mine = c.user_id === me.id;
+      const html = `<button class="q ${mine ? "me" : "ta"} ${size}" data-k="${c.night}" type="button"><span class="seedmark"></span><p>${hl(c.note)}</p><small>${esc(whoName(c.user_id))} · ${d.getMonth() + 1}/${d.getDate()} ${hhmm(c.at)}</small></button>`;
+      const j = h[0] <= h[1] ? 0 : 1; cols[j].push(html); h[j] += len + 12;
+    });
+    wall += `<div class="mon">${m.slice(0, 4)} 年 ${Number(m.slice(5))} 月</div><div class="cols"><div class="col">${cols[0].join("")}</div><div class="col">${cols[1].join("")}</div></div>`;
+  });
+  $("diaryBody").innerHTML = `
+    <div class="wall-stats"><div><b>${all.length}</b><span>句晚安</span></div><div><b>${nightsWritten}</b><span>个晚上</span></div><div><b>${fav ? "「" + esc(fav[0].length > 8 ? fav[0].slice(0, 8) + "…" : fav[0]) + "」" : "—"}</b><span>${fav ? "说得最多 · " + fav[1] + " 次" : "说得最多"}</span></div></div>
+    <input class="field" id="diaryQ" type="search" placeholder="搜索晚安话" autocomplete="off" value="${esc(diaryQ)}">
+    <div class="filters" role="group" aria-label="筛选">
+      <button class="fchip" type="button" data-w="all" aria-pressed="${diaryWho === "all"}">全部</button>
+      <button class="fchip" type="button" data-w="me" aria-pressed="${diaryWho === "me"}">${esc(me.name || "我")} 说的</button>
+      ${partner ? `<button class="fchip" type="button" data-w="ta" aria-pressed="${diaryWho === "ta"}">${esc(partner.name || "TA")} 说的</button>` : ""}
+    </div>
+    ${list.length ? wall : `<p class="note">${all.length ? "没有找到这句晚安话" : "还没有晚安话。睡前打卡时写一句，就会出现在这里"}</p>`}`;
+  $("diaryQ").oninput = (e) => { diaryQ = e.target.value.trim(); const pos = e.target.selectionStart; renderWall(); const inp = $("diaryQ"); inp.focus(); inp.setSelectionRange(pos, pos); };
+  document.querySelectorAll("#diaryBody .fchip").forEach((b) => (b.onclick = () => { diaryWho = b.dataset.w; renderWall(); }));
+  document.querySelectorAll("#diaryBody .q").forEach((b) => (b.onclick = () => { diaryCur = b.dataset.k; diaryView = "desk"; renderDiary(false); $("p-diary").scrollIntoView(); }));
+}
+document.querySelectorAll("#p-diary .seg button").forEach((b) => (b.onclick = () => { diaryView = b.dataset.dv; renderDiary(false); }));
+$("dSound").onclick = () => {
+  diarySound = !diarySound;
+  try { localStorage.setItem("diarySound", diarySound ? "1" : "0"); } catch { /* storage unavailable */ }
+  $("dSound").innerHTML = diarySound ? SPEAKER_ON : SPEAKER_OFF;
+  toast(diarySound ? "撕页声音已打开" : "撕页声音已关闭");
+};
 
 /* ---------- render: settings ---------- */
 function renderSettings() {
