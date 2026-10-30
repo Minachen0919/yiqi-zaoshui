@@ -8,44 +8,45 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="一起早睡">
-<meta name="theme-color" content="#14132a">
+<meta name="theme-color" content="#1f1218">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:opsz,wght@6..12,500;6..12,700;6..12,800;6..12,900&display=swap">
 <style>
 /* Layout: one phone-sized column; night = dark palette, morning = light palette */
 :root{
-  --display:"Noto Sans SC",system-ui,-apple-system,"PingFang SC",sans-serif;
-  --body:"Noto Sans SC",system-ui,-apple-system,"PingFang SC",sans-serif;
-  --mono:"DM Mono",ui-monospace,Menlo,monospace;
+  /* all Avenir (built into iPhone); Nunito Sans is the closest web fallback; PingFang covers Chinese */
+  --display:"Avenir Next","Avenir","Nunito Sans","PingFang SC","Noto Sans SC",system-ui,sans-serif;
+  --body:"Avenir Next","Avenir","Nunito Sans","PingFang SC","Noto Sans SC",system-ui,sans-serif;
+  --mono:"Avenir Next","Avenir","Nunito Sans","PingFang SC",system-ui,sans-serif;
 }
 :root.pm{
-  --bg:#14132a; --surface:#1f1d3d; --fg:#ece9ff; --muted:#a29dc6; --line:#33305a;
-  --night:#1a1840; --night2:#3a2f74; --accent:#9d90ff; --accent-fg:#14132a;
-  --ok:#5cc79a; --warn:#f0b04a; --bad:#ff7a8a; --miss:#3d3a63; --me:#9d90ff; --ta:#ff9f78; color-scheme:dark}
+  --bg:#1f1218; --surface:#2d1b23; --fg:#fbecef; --muted:#c3a2ac; --line:#43293a;
+  --night:#3a1d2c; --night2:#7a2f4b; --accent:#ff5a6e; --accent-fg:#ffffff;
+  --ok:#6fd3a5; --warn:#f5b75a; --bad:#ff8a98; --miss:#4b2f3c; --me:#ff5a6e; --ta:#ffb08a; --skyfg:#ffffff; color-scheme:dark}
 :root.am{
-  --bg:#f6f5f2; --surface:#ffffff; --fg:#26221f; --muted:#7a716a; --line:#ebe6e0;
-  --dawn:#ffc79a; --dawn2:#fff0e2; --accent:#e9764a; --accent-fg:#ffffff;
-  --ok:#2f9e6f; --warn:#d98a1c; --bad:#d6455a; --miss:#e6e0d9; --me:#6b5ce7; --ta:#e9764a; color-scheme:light}
+  --bg:#fff7f4; --surface:#ffffff; --fg:#3a1d2c; --muted:#8c6f78; --line:#f4e1e1;
+  --dawn:#ffc9c4; --dawn2:#fff1ec; --accent:#ff5a6e; --accent-fg:#ffffff;
+  --ok:#2f9e6f; --warn:#c97f12; --bad:#d6455a; --miss:#f1dfe0; --me:#ff5a6e; --ta:#e8875a; --skyfg:#3a1d2c; color-scheme:light}
 *{box-sizing:border-box}
 html,body{margin:0;min-height:100%}
 html{padding:env(safe-area-inset-top,0px) 0 0}
-body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.55;-webkit-tap-highlight-color:transparent;transition:background .5s,color .5s}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;font-weight:500;line-height:1.55;-webkit-tap-highlight-color:transparent;transition:background .5s,color .5s}
 [hidden]{display:none!important}
 .app{max-width:440px;margin:0 auto;padding:16px 16px 110px;display:flex;flex-direction:column;gap:16px}
-h1,h2,h3{font-family:var(--display);font-weight:700;margin:0;text-wrap:balance;letter-spacing:.01em}
-.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+h1,h2,h3{font-family:var(--display);font-weight:800;margin:0;text-wrap:balance;letter-spacing:0}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700}
 .muted{color:var(--muted)}
 /* sky */
 .sky{position:relative;border-radius:24px;padding:24px 20px;color:#fff;overflow:hidden;background:linear-gradient(170deg,var(--night) 0%,var(--night2) 100%)}
-.am .sky{background:linear-gradient(170deg,var(--dawn2) 0%,var(--dawn) 100%);color:#3a2414}
+.am .sky{background:linear-gradient(170deg,var(--dawn2) 0%,var(--dawn) 100%);color:var(--skyfg)}
 .sky .row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;position:relative;z-index:1}
-.sky .clock{font-family:var(--mono);font-size:40px;line-height:1}
+.sky .clock{font-family:var(--mono);font-size:42px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .sky .sub{font-size:13px;opacity:.85;margin-top:4px}
 .streak{text-align:right}
-.streak b{font-family:var(--mono);font-size:28px;display:block;line-height:1.1}
+.streak b{font-family:var(--mono);font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;display:block;line-height:1.1}
 .streak span{font-size:12px;opacity:.85}
 .stars{position:absolute;inset:0}
 .am .stars{display:none}
@@ -60,16 +61,16 @@ h1,h2,h3{font-family:var(--display);font-weight:700;margin:0;text-wrap:balance;l
 .card h2{font-size:20px}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .person{border:1px solid var(--line);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:4px;min-width:0}
-.who{display:flex;align-items:center;gap:8px;font-weight:500;min-width:0}
+.who{display:flex;align-items:center;gap:8px;font-weight:700;min-width:0}
 .who span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dot{width:10px;height:10px;border-radius:50%;flex:none;display:inline-block}
-.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:2px 8px;border-radius:999px;width:max-content}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;width:max-content}
 .chip.ok{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
 .chip.late{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
 .chip.wait{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
 .chip.off{background:color-mix(in srgb,var(--muted) 14%,transparent);color:var(--muted)}
-.time{font-family:var(--mono);font-size:22px}
-.big{font:inherit;font-weight:500;font-size:17px;border:0;border-radius:16px;padding:14px;cursor:pointer;background:var(--accent);color:var(--accent-fg);width:100%;transition:transform .1s}
+.time{font-family:var(--mono);font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.big{font:inherit;font-weight:800;font-size:17px;letter-spacing:.02em;border:0;border-radius:16px;padding:14px;cursor:pointer;background:var(--accent);color:var(--accent-fg);width:100%;transition:transform .1s}
 .big:active{transform:scale(.98)}
 .big:disabled{background:var(--line);color:var(--muted);cursor:default}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -95,14 +96,14 @@ textarea.field{resize:none;min-height:44px}
 .reason{font:inherit;font-size:13px;border:1px solid var(--line);background:none;color:var(--fg);border-radius:999px;padding:6px 14px;cursor:pointer}
 .reason[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
 .btns{display:flex;gap:8px;justify-content:flex-end}
-.btn{font:inherit;font-size:14px;font-weight:500;border:0;border-radius:12px;padding:8px 16px;cursor:pointer;background:var(--accent);color:var(--accent-fg)}
+.btn{font:inherit;font-size:14px;font-weight:700;border:0;border-radius:12px;padding:8px 16px;cursor:pointer;background:var(--accent);color:var(--accent-fg)}
 .btn:disabled{background:var(--line);color:var(--muted);cursor:default}
 .onleave{display:flex;justify-content:space-between;align-items:center;gap:12px;border-radius:16px;padding:12px 14px;background:color-mix(in srgb,var(--warn) 12%,transparent);font-size:14px}
 .onleave small{display:block;color:var(--muted);font-size:12px}
 /* bet */
 .bethead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
 .label{font-size:12px;color:var(--muted)}
-.stake{font-size:17px;font-weight:700;margin-top:2px}
+.stake{font-size:17px;font-weight:800;margin-top:2px}
 .race{display:grid;grid-template-columns:auto 1fr auto;gap:10px 12px;align-items:center}
 .race .nm{display:flex;align-items:center;gap:6px;font-size:14px;max-width:72px;overflow:hidden;white-space:nowrap}
 .race .days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
@@ -137,7 +138,7 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
 /* stats */
 .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .kpi{border:1px solid var(--line);border-radius:14px;padding:10px;min-width:0}
-.kpi .v{font-family:var(--mono);font-size:18px}
+.kpi .v{font-family:var(--mono);font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
 .bars{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;align-items:end;height:160px;border-bottom:1px solid var(--line);position:relative;margin-top:14px}
 .bars .g{position:absolute;left:0;right:0;border-top:1px dashed var(--line);font-size:10px;color:var(--muted);font-family:var(--mono)}
 .bars .g span{position:absolute;right:0;top:-14px}
@@ -149,7 +150,7 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
 .diary{display:flex;flex-direction:column;gap:12px}
 .entry{background:var(--surface);border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px}
 .entry .eh{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
-.entry .ed{font-weight:700;font-size:16px}
+.entry .ed{font-weight:800;font-size:16px}
 .entry .ew{font-size:12px;color:var(--muted)}
 .line{display:flex;gap:10px;align-items:flex-start}
 .line .dot{margin-top:7px}
@@ -175,7 +176,7 @@ button.day.sel{box-shadow:inset 0 0 0 2px var(--fg)}
 .brand h1{font-size:30px}
 .stack{display:flex;flex-direction:column;gap:10px}
 .err{color:var(--bad);font-size:13px;margin:0;min-height:1em}
-.code{font-family:var(--mono);font-size:36px;letter-spacing:.2em;text-align:center}
+.code{font-family:var(--mono);font-size:36px;font-weight:800;letter-spacing:.2em;text-align:center}
 .banner{border-radius:16px;padding:12px 14px;font-size:13px;background:color-mix(in srgb,var(--accent) 12%,transparent);display:flex;gap:10px;justify-content:space-between;align-items:center}
 /* tabs */
 .tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:8px 16px calc(8px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;z-index:5;transition:background .5s}

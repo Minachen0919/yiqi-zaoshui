@@ -117,7 +117,7 @@ function renderToday() {
   const night = isNightPhase(now);
   document.documentElement.classList.toggle("pm", night);
   document.documentElement.classList.toggle("am", !night);
-  document.querySelector('meta[name="theme-color"]').content = night ? "#14132a" : "#f6f5f2";
+  document.querySelector('meta[name="theme-color"]').content = night ? "#1f1218" : "#fff7f4";
 
   const key = nightOf(now);
   const mine = rec(me.id, key), theirs = partner ? rec(partner.id, key) : {};
