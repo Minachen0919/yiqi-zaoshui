@@ -556,7 +556,7 @@ function sheetHTML(k, cls, tally) {
     if (r.leave) return `<div class="msg"><small>${name} · 请假</small>${esc(r.leave.note || "这晚请假了")}</div>`;
     if (r.sleep && r.sleep.note) {
       if (isToday && uid !== me.id && !tonightUnlocked()) return `<div class="msg none">${name} 已经写好了，你也打卡后就能看到</div>`;
-      return `<div class="msg"><small>${name} · ${hhmm(r.sleep.at)}</small>${esc(r.sleep.note)}</div>`;
+      return `<div class="msg${r.sleep.note.length > 60 ? " more" : ""}" data-id="${r.sleep.id}"><small>${name} · ${hhmm(r.sleep.at)}</small><span class="mt">${esc(r.sleep.note)}</span></div>`;
     }
     if (r.sleep) return `<div class="msg none">${name} ${hhmm(r.sleep.at)} 睡了，没写晚安话</div>`;
     return `<div class="msg none">${name} ${isToday ? "还没写" : "这晚没写"}</div>`;
@@ -592,7 +592,7 @@ function renderDesk() {
   $("dBack").onclick = putBack;
   const imgs = [...document.querySelectorAll("#desk .photo")];
   if (imgs.length) signed(imgs.map((im) => im.dataset.path)).then((urls) => imgs.forEach((im, j) => { if (urls[j]) im.src = urls[j]; }));
-  if (older) bindSheetDrag(document.querySelector(".sheet.top"));
+  bindSheetDrag(document.querySelector(".sheet.top"), !!older);
 }
 const tearProgress = (dx, dy) => Math.min(1, Math.hypot(dx, Math.max(0, dy) * 0.7) / 180);
 function sheetTransform(dx, dy) {
@@ -607,14 +607,14 @@ function dragTo(el, dx, dy) {
   const curl = el.querySelector(".curl");
   curl.style.opacity = Math.min(1, f.p * 1.4);
   curl.style.background = `linear-gradient(${f.dir < 0 ? "225deg" : "135deg"},transparent ${70 - f.p * 40}%,rgba(255,255,255,.25) ${72 - f.p * 40}%,rgba(0,0,0,.35) ${80 - f.p * 30}%,transparent 100%)`;
-  if (f.p > 0.5 && diaryDrag && !diaryDrag.ripped) { diaryDrag.ripped = true; ripSound(); $("stub").style.opacity = 1; if (navigator.vibrate) navigator.vibrate(12); }
+  if (f.p > 0.5 && diaryDrag && !diaryDrag.ripped && diaryDrag.canTear !== false) { diaryDrag.ripped = true; ripSound(); $("stub").style.opacity = 1; if (navigator.vibrate) navigator.vibrate(12); }
   const under = document.querySelector(".sheet.under1");
   if (under) { under.style.transition = "none"; under.style.transform = `translateY(${6 - 6 * f.p}px) scale(${0.975 + 0.025 * f.p})`; under.style.filter = `brightness(${0.8 + 0.2 * f.p})`; }
 }
-function bindSheetDrag(top) {
+function bindSheetDrag(top, canTear) {
   top.addEventListener("pointerdown", (e) => {
     top.setPointerCapture(e.pointerId);
-    diaryDrag = { x: e.clientX, y: e.clientY, dx: 0, dy: 0, vx: 0, ripped: false, lx: e.clientX, lt: performance.now() };
+    diaryDrag = { x: e.clientX, y: e.clientY, dx: 0, dy: 0, vx: 0, ripped: false, lx: e.clientX, lt: performance.now(), target: e.target, canTear };
   });
   top.addEventListener("pointermove", (e) => {
     if (!diaryDrag) return;
@@ -626,7 +626,8 @@ function bindSheetDrag(top) {
   const end = () => {
     if (!diaryDrag) return;
     const { dx, dy, vx, ripped } = diaryDrag;
-    if (tearProgress(dx, dy) > 0.5 || (Math.abs(vx) > 0.9 && Math.abs(dx) > 40)) flyAway(top, dx, dy, ripped);
+    // the first page can be tapped and wiggled but not torn off
+    if (canTear && (tearProgress(dx, dy) > 0.5 || (Math.abs(vx) > 0.9 && Math.abs(dx) > 40))) flyAway(top, dx, dy, ripped);
     else springBack(top, dx, dy);
   };
   top.addEventListener("pointerup", end);
@@ -637,7 +638,15 @@ function springBack(el, dx, dy) {
   el.style.transform = ""; el.querySelector(".curl").style.opacity = 0;
   const under = document.querySelector(".sheet.under1"); if (under) { under.style.transform = ""; under.style.filter = ""; }
   const finish = () => { diaryDrag = null; renderDesk(); };
-  if (reduceMotion() || (Math.abs(dx) < 4 && Math.abs(dy) < 4)) return finish();
+  // a tap (not a drag) on a long note opens it in full as a letter
+  if (Math.abs(dx) < 4 && Math.abs(dy) < 4) {
+    const tapped = diaryDrag && diaryDrag.target && diaryDrag.target.closest(".msg.more");
+    const note = tapped && checkins.find((c) => c.id === tapped.dataset.id);
+    diaryDrag = null;
+    if (note) return openLetter(note);
+    return renderDesk();
+  }
+  if (reduceMotion()) return finish();
   el.animate([{ transform: f.t, transformOrigin: f.origin }, { transform: `rotate(${f.dir * -2}deg)`, transformOrigin: f.origin, offset: 0.7 }, { transform: "none", transformOrigin: f.origin }],
     { duration: 420, easing: "cubic-bezier(.3,1.4,.5,1)" }).onfinish = finish;
 }
@@ -924,7 +933,7 @@ function openLetter(c) {
   const el = $("letter");
   el.innerHTML = `<div class="lt-bg"></div>
     <div class="env" id="env"><div class="env-back"></div>
-      <div class="paper" id="paper"><span class="to">TO ${esc(me.name || "你")}</span><p>${esc(c.note)}</p><span class="from">${esc(partner?.name || "TA")} · ${hhmm(c.at)}</span></div>
+      <div class="paper" id="paper"><span class="to">TO ${esc(c.user_id === me.id ? (partner?.name || "TA") : (me.name || "你"))}</span><p>${esc(c.note)}</p><span class="from">${esc(whoName(c.user_id))} · ${hhmm(c.at)}</span></div>
       <div class="env-front"></div><div class="flap" id="flap"></div>${SEAL}</div>
     <button class="pill main lt-close" id="ltClose" type="button">收好了</button>`;
   el.hidden = false;
@@ -1069,13 +1078,17 @@ $("p-out").onclick = signOut;
 $("s-out").onclick = signOut;
 
 /* ---------- events: check-in ---------- */
+$("gnInput").addEventListener("input", (e) => {
+  const t = e.target; t.style.height = "auto"; t.style.height = t.scrollHeight + 2 + "px";
+  const n = t.value.length; $("gnCount").hidden = n < 400; $("gnCount").textContent = `${n} / 500`;
+});
 $("mainBtn").onclick = async () => {
   const btn = $("mainBtn"); btn.disabled = true;
   if (isNightPhase()) {
     const note = $("gnInput").value.trim() || null;
     const r = await checkIn("sleep", { note });
     if (r) {
-      $("gnInput").value = "";
+      $("gnInput").value = ""; $("gnInput").style.height = ""; $("gnCount").hidden = true;
       const t = partner ? rec(partner.id, r.night) : {};
       playSleep(`晚安，${me.name || ""}`.trim(), !partner ? "" : (t.sleep || t.leave) ? "TA 也躺下了，晚安话已解锁" : "TA 会收到通知，等 TA 也躺下");
     }
