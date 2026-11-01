@@ -530,7 +530,7 @@ async function renderDiary(refetch = true) {
   document.querySelectorAll("#p-diary .seg button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.dv === diaryView));
   if (refetch && !diaryBusy) { diaryBusy = true; try { await loadDiary(); } finally { diaryBusy = false; } }
   if (diaryDrag) return;
-  diaryView === "desk" ? renderDesk() : renderWall();
+  diaryView === "desk" ? renderDesk() : renderWall(document.activeElement && document.activeElement.id === "diaryQ");
 }
 
 /* --- desk calendar --- */
@@ -682,7 +682,7 @@ function putBack() {
 }
 
 /* --- wall of every goodnight --- */
-function renderWall() {
+function renderWall(listOnly = false) {
   const today = nightOf(), locked = !tonightUnlocked();
   const all = checkins.filter((c) => c.kind === "sleep" && c.note && !(c.night === today && c.user_id !== me.id && locked))
     .sort((a, b) => b.at.localeCompare(a.at));
@@ -706,6 +706,10 @@ function renderWall() {
     });
     wall += `<div class="mon">${m.slice(0, 4)} 年 ${Number(m.slice(5))} 月</div><div class="cols"><div class="col">${cols[0].join("")}</div><div class="col">${cols[1].join("")}</div></div>`;
   });
+  const listHTML = list.length ? wall : `<p class="note">${all.length ? "没有找到这句晚安话" : "还没有晚安话。睡前打卡时写一句，就会出现在这里"}</p>`;
+  const bindCards = () => document.querySelectorAll("#diaryBody .q").forEach((b) => (b.onclick = () => { diaryCur = b.dataset.k; diaryView = "desk"; renderDiary(false); $("p-diary").scrollIntoView(); }));
+  // while someone is typing in the search box, only refresh the results so the box (and Chinese input) is never rebuilt
+  if (listOnly && $("wallList")) { $("wallList").innerHTML = listHTML; bindCards(); return; }
   $("diaryBody").innerHTML = `
     <div class="wall-stats"><div><b>${all.length}</b><span>句晚安</span></div><div><b>${nightsWritten}</b><span>个晚上</span></div><div><b>${fav ? "「" + esc(fav[0].length > 8 ? fav[0].slice(0, 8) + "…" : fav[0]) + "」" : "—"}</b><span>${fav ? "说得最多 · " + fav[1] + " 次" : "说得最多"}</span></div></div>
     <input class="field" id="diaryQ" type="search" placeholder="搜索晚安话" autocomplete="off" value="${esc(diaryQ)}">
@@ -714,10 +718,14 @@ function renderWall() {
       <button class="fchip" type="button" data-w="me" aria-pressed="${diaryWho === "me"}">${esc(me.name || "我")} 说的</button>
       ${partner ? `<button class="fchip" type="button" data-w="ta" aria-pressed="${diaryWho === "ta"}">${esc(partner.name || "TA")} 说的</button>` : ""}
     </div>
-    ${list.length ? wall : `<p class="note">${all.length ? "没有找到这句晚安话" : "还没有晚安话。睡前打卡时写一句，就会出现在这里"}</p>`}`;
-  $("diaryQ").oninput = (e) => { diaryQ = e.target.value.trim(); const pos = e.target.selectionStart; renderWall(); const inp = $("diaryQ"); inp.focus(); inp.setSelectionRange(pos, pos); };
+    <div id="wallList">${listHTML}</div>`;
+  const q = $("diaryQ");
+  // pinyin and other input methods compose first; search only once a word is actually entered
+  const search = () => { diaryQ = q.value.trim(); renderWall(true); };
+  q.addEventListener("input", (e) => { if (!e.isComposing) search(); });
+  q.addEventListener("compositionend", search);
   document.querySelectorAll("#diaryBody .fchip").forEach((b) => (b.onclick = () => { diaryWho = b.dataset.w; renderWall(); }));
-  document.querySelectorAll("#diaryBody .q").forEach((b) => (b.onclick = () => { diaryCur = b.dataset.k; diaryView = "desk"; renderDiary(false); $("p-diary").scrollIntoView(); }));
+  bindCards();
 }
 document.querySelectorAll("#p-diary .seg button").forEach((b) => (b.onclick = () => { diaryView = b.dataset.dv; renderDiary(false); }));
 $("dSound").onclick = () => {
@@ -1078,10 +1086,13 @@ $("p-out").onclick = signOut;
 $("s-out").onclick = signOut;
 
 /* ---------- events: check-in ---------- */
-$("gnInput").addEventListener("input", (e) => {
-  const t = e.target; t.style.height = "auto"; t.style.height = t.scrollHeight + 2 + "px";
+const growNote = () => {
+  const t = $("gnInput");
+  if (t.scrollHeight > t.clientHeight + 2) t.style.height = t.scrollHeight + 2 + "px";
   const n = t.value.length; $("gnCount").hidden = n < 400; $("gnCount").textContent = `${n} / 500`;
-});
+};
+$("gnInput").addEventListener("compositionend", growNote);
+$("gnInput").addEventListener("input", (e) => { if (!e.isComposing) growNote(); });
 $("mainBtn").onclick = async () => {
   const btn = $("mainBtn"); btn.disabled = true;
   if (isNightPhase()) {
